@@ -1,4 +1,5 @@
 export { Canvas } from './Canvas';
+export { ColorPicker, ColorSwatches } from './ColorPicker';
 export { ContextMenu } from './ContextMenu';
 export { CustomEdge } from './CustomEdge';
 export { EdgePropertyPanel } from './EdgePropertyPanel';

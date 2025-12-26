@@ -74,17 +74,31 @@ export function Toolbar() {
 
   /**
    * Close menu when clicking outside
+   * Uses capture phase to catch events before ReactFlow's pane handlers
    */
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenu(null);
+      // Only process if a menu is currently open
+      if (openMenu === null) return;
+      
+      // Check if click is inside the menu container
+      if (menuRef.current && menuRef.current.contains(e.target as Node)) {
+        return; // Click is inside menu, don't close
       }
+      
+      // Click is outside, close the menu
+      setOpenMenu(null);
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    // Use capture phase to ensure we get the event before ReactFlow's handlers
+    document.addEventListener('mousedown', handleClickOutside, true);
+    document.addEventListener('pointerdown', handleClickOutside, true);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside, true);
+      document.removeEventListener('pointerdown', handleClickOutside, true);
+    };
+  }, [openMenu]);
 
   /**
    * Close menu on Escape
@@ -98,6 +112,18 @@ export function Toolbar() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  /**
+   * Close menu when window loses focus or user clicks on another app
+   */
+  useEffect(() => {
+    const handleBlur = () => {
+      setOpenMenu(null);
+    };
+
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
   }, []);
 
   /**
@@ -396,17 +422,24 @@ export function Toolbar() {
     setOpenMenu(openMenu === menu ? null : menu);
   };
 
+  const isDarkMode = mode === 'dark';
+
   return (
-    <div className="absolute top-0 left-0 right-0 z-20">
+    <div className="absolute top-0 left-0 right-0 z-30">
       {/* Main Menubar */}
       <div
         ref={menuRef}
-        className="flex items-center bg-arch-surface border-b border-arch-border px-2"
+        className={`flex items-center px-2 border-b transition-colors
+          ${isDarkMode 
+            ? 'bg-arch-surface border-arch-border' 
+            : 'bg-white border-gray-200'
+          }`}
       >
         {/* Logo */}
-        <div className="px-3 py-2 flex items-center gap-2 border-r border-arch-border mr-2">
+        <div className={`px-3 py-2 flex items-center gap-2 border-r mr-2
+          ${isDarkMode ? 'border-arch-border' : 'border-gray-200'}`}>
           <span className="text-arch-primary text-lg">⬡</span>
-          <span className="text-white font-semibold text-sm">ArchFlow</span>
+          <span className={`font-semibold text-sm ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>ArchFlow</span>
         </div>
 
         {/* File Menu */}
@@ -644,13 +677,23 @@ interface MenuButtonProps {
 }
 
 function MenuButton({ label, isOpen, onClick, children }: MenuButtonProps) {
+  const { mode } = useThemeStore();
+  const isDarkMode = mode === 'dark';
+  
   return (
     <div className="relative">
       <button
         onClick={onClick}
         className={`
           px-3 py-2 text-sm transition-colors flex items-center gap-1
-          ${isOpen ? 'bg-arch-surface-light text-white' : 'text-gray-300 hover:bg-arch-surface-light hover:text-white'}
+          ${isOpen 
+            ? isDarkMode 
+              ? 'bg-arch-surface-light text-white' 
+              : 'bg-gray-100 text-gray-900'
+            : isDarkMode 
+              ? 'text-gray-300 hover:bg-arch-surface-light hover:text-white' 
+              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+          }
         `}
       >
         {label}
@@ -658,7 +701,11 @@ function MenuButton({ label, isOpen, onClick, children }: MenuButtonProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-0.5 w-56 bg-arch-surface border border-arch-border rounded-lg shadow-xl py-1 z-50">
+        <div className={`absolute top-full left-0 mt-0.5 w-56 rounded-lg shadow-xl py-1 z-50 border
+          ${isDarkMode 
+            ? 'bg-arch-surface border-arch-border' 
+            : 'bg-white border-gray-200'
+          }`}>
           {children}
         </div>
       )}
@@ -686,19 +733,32 @@ function MenuItem({
   disabled = false,
   danger = false,
 }: MenuItemProps) {
+  const { mode } = useThemeStore();
+  const isDarkMode = mode === 'dark';
+  
   return (
     <button
       onClick={onClick}
       disabled={disabled}
       className={`
         w-full px-3 py-2 flex items-center gap-3 text-sm transition-colors
-        ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-arch-surface-light'}
-        ${danger && !disabled ? 'text-red-400 hover:text-red-300' : 'text-gray-300 hover:text-white'}
+        ${disabled 
+          ? 'opacity-40 cursor-not-allowed' 
+          : isDarkMode 
+            ? 'hover:bg-arch-surface-light' 
+            : 'hover:bg-gray-100'
+        }
+        ${danger && !disabled 
+          ? 'text-red-400 hover:text-red-300' 
+          : isDarkMode 
+            ? 'text-gray-300 hover:text-white' 
+            : 'text-gray-600 hover:text-gray-900'
+        }
       `}
     >
       <Icon size={16} />
       <span className="flex-1 text-left">{label}</span>
-      {shortcut && <span className="text-xs text-gray-500">{shortcut}</span>}
+      {shortcut && <span className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-400'}`}>{shortcut}</span>}
     </button>
   );
 }
@@ -707,7 +767,9 @@ function MenuItem({
  * Menu divider
  */
 function MenuDivider() {
-  return <div className="h-px bg-arch-border my-1" />;
+  const { mode } = useThemeStore();
+  const isDarkMode = mode === 'dark';
+  return <div className={`h-px my-1 ${isDarkMode ? 'bg-arch-border' : 'bg-gray-200'}`} />;
 }
 
 /**
@@ -721,6 +783,9 @@ interface QuickButtonProps {
 }
 
 function QuickButton({ icon: Icon, onClick, disabled = false, tooltip }: QuickButtonProps) {
+  const { mode } = useThemeStore();
+  const isDarkMode = mode === 'dark';
+  
   return (
     <button
       onClick={onClick}
@@ -728,7 +793,12 @@ function QuickButton({ icon: Icon, onClick, disabled = false, tooltip }: QuickBu
       title={tooltip}
       className={`
         p-1.5 rounded transition-colors
-        ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-arch-surface-light text-gray-400 hover:text-white'}
+        ${disabled 
+          ? 'opacity-40 cursor-not-allowed' 
+          : isDarkMode 
+            ? 'hover:bg-arch-surface-light text-gray-400 hover:text-white' 
+            : 'hover:bg-gray-100 text-gray-500 hover:text-gray-900'
+        }
       `}
     >
       <Icon size={16} />

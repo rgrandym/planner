@@ -2,36 +2,111 @@ import { Canvas, ErrorBoundary, PropertyPanel, SettingsModal, Sidebar } from '@/
 import { EdgePropertyPanel } from '@/components/EdgePropertyPanel';
 import { useFlowStore } from '@/store/flowStore';
 import { useThemeStore } from '@/store/themeStore';
+import { useUIStore } from '@/store/uiStore';
+import { Maximize2, Minimize2, PanelLeft, PanelRight } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { ReactFlowProvider } from 'reactflow';
 
 /**
  * App Component
  * Main application layout with three-column structure:
- * - Left: Node library sidebar
+ * - Left: Node library sidebar (toggleable)
  * - Center: React Flow canvas
- * - Right: Property panel (visible when node selected) or Edge panel (when edge selected)
+ * - Right: Property panel (visible when node selected or pinned) or Edge panel
  */
 function App() {
-  const { isSettingsModalOpen, setSettingsModalOpen, selectedEdgeId } = useFlowStore();
+  const { isSettingsModalOpen, setSettingsModalOpen, selectedEdgeId, selectedNodeId } = useFlowStore();
   const { mode } = useThemeStore();
+  const { 
+    isLeftSidebarVisible, 
+    isRightPanelVisible, 
+    isPropertyPanelPinned,
+    isFullViewMode,
+    toggleLeftSidebar,
+    toggleRightPanel,
+    toggleFullViewMode,
+  } = useUIStore();
+
+  // Determine if right panel should show
+  const showRightPanel = isRightPanelVisible && (
+    selectedEdgeId || 
+    selectedNodeId || 
+    isPropertyPanelPinned
+  );
 
   return (
     <ErrorBoundary>
       <ReactFlowProvider>
         <div className={`h-screen w-screen flex overflow-hidden ${
           mode === 'dark' 
-            ? 'bg-arch-bg' 
-            : 'bg-arch-bg-light'
+            ? 'dark bg-arch-bg text-white' 
+            : 'light bg-arch-bg-light text-arch-text-light'
         }`}>
           {/* Left Sidebar - Node Library */}
-          <Sidebar />
+          {isLeftSidebarVisible && !isFullViewMode && <Sidebar />}
 
           {/* Main Canvas Area */}
-          <Canvas />
+          <div className="flex-1 relative">
+            <Canvas />
+            
+            {/* Floating Panel Controls - positioned below toolbar */}
+            <div className="absolute top-14 left-4 z-20 flex gap-2">
+              {!isFullViewMode && (
+                <button
+                  onClick={toggleLeftSidebar}
+                  className={`p-2 rounded-lg transition-colors shadow-lg
+                    ${mode === 'dark' 
+                      ? 'bg-arch-surface hover:bg-arch-surface-light border border-arch-border' 
+                      : 'bg-white hover:bg-gray-100 border border-gray-200'
+                    }
+                    ${!isLeftSidebarVisible ? 'ring-2 ring-arch-primary' : ''}
+                  `}
+                  title={isLeftSidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+                >
+                  <PanelLeft size={18} className={mode === 'dark' ? 'text-gray-300' : 'text-gray-600'} />
+                </button>
+              )}
+              
+              <button
+                onClick={toggleFullViewMode}
+                className={`p-2 rounded-lg transition-colors shadow-lg
+                  ${mode === 'dark' 
+                    ? 'bg-arch-surface hover:bg-arch-surface-light border border-arch-border' 
+                    : 'bg-white hover:bg-gray-100 border border-gray-200'
+                  }
+                  ${isFullViewMode ? 'ring-2 ring-arch-primary' : ''}
+                `}
+                title={isFullViewMode ? 'Exit full view' : 'Full view'}
+              >
+                {isFullViewMode 
+                  ? <Minimize2 size={18} className={mode === 'dark' ? 'text-gray-300' : 'text-gray-600'} />
+                  : <Maximize2 size={18} className={mode === 'dark' ? 'text-gray-300' : 'text-gray-600'} />
+                }
+              </button>
+            </div>
+
+            {/* Right Panel Toggle (when hidden) - positioned below toolbar */}
+            {!isFullViewMode && !isRightPanelVisible && (
+              <button
+                onClick={toggleRightPanel}
+                className={`absolute top-14 right-4 z-20 p-2 rounded-lg transition-colors shadow-lg
+                  ${mode === 'dark' 
+                    ? 'bg-arch-surface hover:bg-arch-surface-light border border-arch-border' 
+                    : 'bg-white hover:bg-gray-100 border border-gray-200'
+                  }
+                  ring-2 ring-arch-primary
+                `}
+                title="Show property panel"
+              >
+                <PanelRight size={18} className={mode === 'dark' ? 'text-gray-300' : 'text-gray-600'} />
+              </button>
+            )}
+          </div>
 
           {/* Right Sidebar - Property Panel or Edge Panel */}
-          {selectedEdgeId ? <EdgePropertyPanel /> : <PropertyPanel />}
+          {showRightPanel && !isFullViewMode && (
+            selectedEdgeId ? <EdgePropertyPanel /> : <PropertyPanel />
+          )}
 
           {/* Settings Modal */}
           <SettingsModal 

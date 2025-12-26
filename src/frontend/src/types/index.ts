@@ -16,6 +16,7 @@ export type NodeCategory =
   | 'processing'
   | 'memory'
   | 'tools'
+  | 'annotations'
   | 'custom';
 
 /**
@@ -48,6 +49,8 @@ export interface NodeTypeConfig {
   shape?: NodeShape;
   /** Whether this is a custom user-created node */
   isCustom?: boolean;
+  /** Whether this is a text label node (uses TextLabelNode component) */
+  isTextLabel?: boolean;
 }
 
 /**

@@ -1,4 +1,5 @@
 import { useFlowStore } from '@/store/flowStore';
+import { ArrowHeadStyle, useGlobalSettingsStore } from '@/store/globalSettingsStore';
 import { EdgeLineStyle } from '@/types';
 import { memo, useMemo } from 'react';
 import { BaseEdge, EdgeProps, getBezierPath } from 'reactflow';
@@ -49,13 +50,33 @@ function getStrokeDasharray(lineStyle: EdgeLineStyle): string {
 }
 
 /**
+ * Generate arrow head path based on style
+ */
+function getArrowHeadPath(style: ArrowHeadStyle): string {
+  switch (style) {
+    case 'filled':
+      return 'M2,2 L10,6 L2,10 L4,6 L2,2';
+    case 'outlined':
+      return 'M2,2 L10,6 L2,10';
+    case 'diamond':
+      return 'M1,6 L6,2 L11,6 L6,10 Z';
+    case 'circle':
+      return 'M6,2 A4,4 0 1,1 6,10 A4,4 0 1,1 6,2';
+    case 'none':
+    default:
+      return '';
+  }
+}
+
+/**
  * CustomEdge Component
  * A custom edge with:
  * - Smooth bezier curves for organic flow
- * - Arrowhead markers for directionality
+ * - Configurable arrowhead markers (filled, outlined, diamond, circle, none)
  * - Support for multiple parallel edges between same nodes
  * - Line style customization (solid, dashed, dotted)
  * - Individual edge styling (color, width)
+ * - Arrow size proportional to line thickness
  */
 function CustomEdgeComponent({
   id,
@@ -72,6 +93,7 @@ function CustomEdgeComponent({
   selected,
 }: EdgeProps) {
   const edges = useFlowStore((state) => state.edges);
+  const globalSettings = useGlobalSettingsStore();
 
   // Calculate offset for parallel edges
   const offset = useMemo(
@@ -79,10 +101,12 @@ function CustomEdgeComponent({
     [id, source, target, edges]
   );
 
-  // Get edge properties
-  const strokeColor = (style.stroke as string) || '#06b6d4';
-  const strokeWidth = (style.strokeWidth as number) || 2;
-  const lineStyle: EdgeLineStyle = data?.lineStyle || 'solid';
+  // Get edge properties with fallbacks to global settings
+  const strokeColor = (style.stroke as string) || globalSettings.defaultLineColor;
+  const strokeWidth = (style.strokeWidth as number) || globalSettings.defaultLineWidth;
+  const lineStyle: EdgeLineStyle = data?.lineStyle || globalSettings.defaultLineStyle;
+  const arrowHeadSize = (data?.arrowHeadSize as number) || globalSettings.defaultArrowHeadSize;
+  const arrowHeadStyle: ArrowHeadStyle = (data?.arrowHeadStyle as ArrowHeadStyle) || globalSettings.defaultArrowHeadStyle;
 
   // Apply offset perpendicular to the edge direction
   const dx = targetX - sourceX;
@@ -117,29 +141,38 @@ function CustomEdgeComponent({
     curvature,
   });
 
-  // Generate unique marker ID for this edge color
-  const markerId = `arrowhead-${strokeColor.replace('#', '')}`;
+  // Generate unique marker ID for this edge's combination of color, style, and size
+  const markerId = `arrowhead-${id}-${strokeColor.replace('#', '')}-${arrowHeadStyle}-${arrowHeadSize}`;
+  
+  // Calculate arrow size proportional to stroke width
+  const baseArrowSize = 12;
+  const scaledArrowSize = baseArrowSize * arrowHeadSize * (1 + (strokeWidth - 2) * 0.15);
 
   return (
     <>
       {/* SVG Defs for arrowhead marker */}
-      <defs>
-        <marker
-          id={markerId}
-          markerWidth="12"
-          markerHeight="12"
-          refX="10"
-          refY="6"
-          orient="auto"
-          markerUnits="strokeWidth"
-        >
-          <path
-            d="M2,2 L10,6 L2,10 L4,6 L2,2"
-            fill={strokeColor}
-            stroke="none"
-          />
-        </marker>
-      </defs>
+      {arrowHeadStyle !== 'none' && (
+        <defs>
+          <marker
+            id={markerId}
+            markerWidth={scaledArrowSize}
+            markerHeight={scaledArrowSize}
+            refX={arrowHeadStyle === 'circle' ? 6 : 10}
+            refY="6"
+            orient="auto"
+            markerUnits="userSpaceOnUse"
+          >
+            <path
+              d={getArrowHeadPath(arrowHeadStyle)}
+              fill={arrowHeadStyle === 'outlined' ? 'none' : strokeColor}
+              stroke={arrowHeadStyle === 'outlined' ? strokeColor : 'none'}
+              strokeWidth={arrowHeadStyle === 'outlined' ? 1.5 : 0}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          </marker>
+        </defs>
+      )}
 
       {/* Edge Path */}
       <BaseEdge
@@ -154,7 +187,7 @@ function CustomEdgeComponent({
           strokeLinejoin: 'round',
           cursor: 'pointer',
         }}
-        markerEnd={`url(#${markerId})`}
+        markerEnd={arrowHeadStyle !== 'none' ? `url(#${markerId})` : undefined}
       />
 
       {/* Invisible wider path for easier selection */}

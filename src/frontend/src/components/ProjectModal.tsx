@@ -1,17 +1,21 @@
-import { hydrateNodeData, useFlowStore } from '@/store/flowStore';
+import { dehydrateNodeData, hydrateNodeData, useFlowStore } from '@/store/flowStore';
+import { useGlobalSettingsStore } from '@/store/globalSettingsStore';
 import { SavedProject, useProjectStore } from '@/store/projectStore';
 import { ArchNodeData } from '@/types';
 import {
     Check,
     Copy,
+    Download,
     Edit2,
+    FileDown,
+    FileUp,
     FolderOpen,
+    HardDrive,
     Plus,
-    Save,
     Trash2,
     X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { Node } from 'reactflow';
 
@@ -39,10 +43,13 @@ export function ProjectModal() {
     renameProject,
     setHasUnsavedChanges,
   } = useProjectStore();
+  
+  const { setSaveDirectory } = useGlobalSettingsStore();
 
   const [newProjectName, setNewProjectName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isProjectModalOpen) return null;
 
@@ -75,6 +82,149 @@ export function ProjectModal() {
       toast.success(`Saved "${project?.name}"`);
     }
     setHasUnsavedChanges(false);
+  };
+
+  /**
+   * Save project to file system using File System Access API
+   */
+  const handleSaveToFile = async () => {
+    const projectName = activeProjectId 
+      ? projects.find(p => p.id === activeProjectId)?.name || 'project'
+      : `Project ${projects.length + 1}`;
+    
+    const projectData = {
+      name: projectName,
+      nodes: nodes.map(node => ({
+        ...node,
+        data: dehydrateNodeData(node.data),
+      })),
+      edges,
+      viewport,
+      exportedAt: Date.now(),
+      version: '1.0',
+    };
+
+    const jsonString = JSON.stringify(projectData, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+
+    // Check for File System Access API support
+    const supportsFilePicker = 'showSaveFilePicker' in window;
+
+    if (supportsFilePicker) {
+      try {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: `${projectName.replace(/[^a-z0-9]/gi, '_')}.archflow.json`,
+          types: [{
+            description: 'ArchFlow Project',
+            accept: { 'application/json': ['.archflow.json', '.json'] },
+          }],
+        });
+        
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        
+        // Update save directory
+        if (handle.name) {
+          setSaveDirectory(handle.name);
+        }
+        
+        toast.success(`Saved to "${handle.name}"`);
+        setHasUnsavedChanges(false);
+        return;
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        console.warn('File System Access API failed:', err);
+      }
+    }
+
+    // Fallback: download
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.download = `${projectName.replace(/[^a-z0-9]/gi, '_')}.archflow.json`;
+    link.href = url;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    toast.success('Project exported');
+  };
+
+  /**
+   * Load project from file system
+   */
+  const handleLoadFromFile = async () => {
+    // Check for File System Access API support
+    const supportsFilePicker = 'showOpenFilePicker' in window;
+
+    if (supportsFilePicker) {
+      try {
+        const [handle] = await window.showOpenFilePicker({
+          types: [{
+            description: 'ArchFlow Project',
+            accept: { 'application/json': ['.archflow.json', '.json'] },
+          }],
+          multiple: false,
+        });
+        
+        const file = await handle.getFile();
+        await loadProjectFromFile(file);
+        return;
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return;
+        console.warn('File System Access API failed:', err);
+      }
+    }
+
+    // Fallback: file input
+    fileInputRef.current?.click();
+  };
+
+  /**
+   * Load project from file object
+   */
+  const loadProjectFromFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      // Validate data structure
+      if (!data.nodes || !data.edges) {
+        throw new Error('Invalid project file format');
+      }
+      
+      // Hydrate nodes
+      const hydratedNodes = data.nodes.map((node: Node<Omit<ArchNodeData, 'icon'>>) => ({
+        ...node,
+        data: hydrateNodeData(node.data),
+      })) as Node<ArchNodeData>[];
+
+      // Load into canvas
+      loadCanvas(hydratedNodes, data.edges, data.viewport || { x: 0, y: 0, zoom: 1 });
+      
+      // Create a new project entry
+      const name = data.name || file.name.replace(/\.(archflow\.)?json$/i, '');
+      const id = createProject(name);
+      saveProject(id, hydratedNodes, data.edges, data.viewport || { x: 0, y: 0, zoom: 1 });
+      
+      toast.success(`Loaded "${name}"`);
+      setProjectModalOpen(false);
+    } catch (err) {
+      console.error('Failed to load project:', err);
+      toast.error('Failed to load project file');
+    }
+  };
+
+  /**
+   * Handle file input change
+   */
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      loadProjectFromFile(file);
+    }
+    // Reset input
+    e.target.value = '';
   };
 
   /**
@@ -204,7 +354,7 @@ export function ProjectModal() {
           {/* Save Current Canvas */}
           {nodes.length > 0 && (
             <div className="mb-6 p-4 bg-arch-bg rounded-lg border border-arch-border">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-3">
                 <div>
                   <p className="text-sm text-white font-medium">
                     Current Canvas
@@ -216,17 +366,70 @@ export function ProjectModal() {
                     {nodes.length} nodes, {edges.length} connections
                   </p>
                 </div>
+              </div>
+              <div className="flex gap-2">
                 <button
                   onClick={handleSaveProject}
-                  className="px-4 py-2 bg-green-500/20 text-green-400 text-sm font-medium rounded-lg
-                             hover:bg-green-500/30 transition-colors flex items-center gap-2"
+                  className="flex-1 px-3 py-2 bg-green-500/20 text-green-400 text-sm font-medium rounded-lg
+                             hover:bg-green-500/30 transition-colors flex items-center justify-center gap-2"
+                  title="Save to browser storage"
                 >
-                  <Save size={16} />
-                  Save
+                  <HardDrive size={16} />
+                  Save to Browser
+                </button>
+                <button
+                  onClick={handleSaveToFile}
+                  className="flex-1 px-3 py-2 bg-blue-500/20 text-blue-400 text-sm font-medium rounded-lg
+                             hover:bg-blue-500/30 transition-colors flex items-center justify-center gap-2"
+                  title="Save to file system"
+                >
+                  <Download size={16} />
+                  Save to File
                 </button>
               </div>
             </div>
           )}
+
+          {/* File System Import/Export */}
+          <div className="mb-6 p-4 bg-arch-bg rounded-lg border border-arch-border">
+            <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+              <FileUp size={16} className="text-arch-primary" />
+              Import / Export
+            </h4>
+            <div className="flex gap-2">
+              <button
+                onClick={handleLoadFromFile}
+                className="flex-1 px-3 py-2 bg-arch-surface text-gray-300 text-sm font-medium rounded-lg
+                           hover:bg-arch-surface-light transition-colors flex items-center justify-center gap-2
+                           border border-arch-border hover:border-arch-primary/50"
+              >
+                <FileUp size={16} />
+                Import Project
+              </button>
+              {nodes.length > 0 && (
+                <button
+                  onClick={handleSaveToFile}
+                  className="flex-1 px-3 py-2 bg-arch-surface text-gray-300 text-sm font-medium rounded-lg
+                             hover:bg-arch-surface-light transition-colors flex items-center justify-center gap-2
+                             border border-arch-border hover:border-arch-primary/50"
+                >
+                  <FileDown size={16} />
+                  Export Project
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Projects are saved as .archflow.json files
+            </p>
+            {/* Hidden file input for fallback */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.archflow.json"
+              onChange={handleFileInputChange}
+              className="hidden"
+            />
+          </div>
 
           {/* Project List */}
           <div className="space-y-2">

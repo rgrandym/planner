@@ -1,22 +1,10 @@
 import { useFlowStore } from '@/store/flowStore';
+import { ARROW_HEAD_STYLES, ArrowHeadStyle, useGlobalSettingsStore } from '@/store/globalSettingsStore';
+import { useUIStore } from '@/store/uiStore';
 import { EdgeLineStyle } from '@/types';
-import { ArrowRight, Trash2, X } from 'lucide-react';
+import { ArrowRight, Pin, PinOff, Trash2, X } from 'lucide-react';
 import { useMemo } from 'react';
-
-/**
- * Color presets for edge styling
- */
-const EDGE_COLOR_PRESETS = [
-  '#06b6d4', // Cyan (default)
-  '#8b5cf6', // Purple
-  '#3b82f6', // Blue
-  '#10b981', // Green
-  '#f59e0b', // Amber
-  '#ef4444', // Red
-  '#ec4899', // Pink
-  '#6366f1', // Indigo
-  '#ffffff', // White
-];
+import { ColorPicker } from './ColorPicker';
 
 /**
  * Line style options
@@ -31,14 +19,17 @@ const LINE_STYLES: { value: EdgeLineStyle; label: string }[] = [
  * EdgePropertyPanel Component
  * Panel for editing edge (connector) properties.
  * Features:
- * - Stroke color picker
+ * - Full color picker with presets and custom input
  * - Stroke width slider
  * - Line style selector (solid, dashed, dotted)
+ * - Arrow head size and style
  * - Animation toggle
  * - Delete button
  */
 export function EdgePropertyPanel() {
   const { edges, selectedEdgeId, updateEdge, removeEdge, setSelectedEdgeId } = useFlowStore();
+  const globalSettings = useGlobalSettingsStore();
+  const { isPropertyPanelPinned, togglePropertyPanelPinned } = useUIStore();
 
   const selectedEdge = useMemo(
     () => edges.find((e) => e.id === selectedEdgeId),
@@ -50,9 +41,11 @@ export function EdgePropertyPanel() {
   }
 
   // Get current values
-  const strokeColor = (selectedEdge.style?.stroke as string) || '#06b6d4';
-  const strokeWidth = (selectedEdge.style?.strokeWidth as number) || 2;
-  const lineStyle: EdgeLineStyle = selectedEdge.data?.lineStyle || 'solid';
+  const strokeColor = (selectedEdge.style?.stroke as string) || globalSettings.defaultLineColor;
+  const strokeWidth = (selectedEdge.style?.strokeWidth as number) || globalSettings.defaultLineWidth;
+  const lineStyle: EdgeLineStyle = selectedEdge.data?.lineStyle || globalSettings.defaultLineStyle;
+  const arrowHeadSize = (selectedEdge.data?.arrowHeadSize as number) || globalSettings.defaultArrowHeadSize;
+  const arrowHeadStyle: ArrowHeadStyle = (selectedEdge.data?.arrowHeadStyle as ArrowHeadStyle) || globalSettings.defaultArrowHeadStyle;
   const isAnimated = selectedEdge.animated || false;
 
   /**
@@ -119,12 +112,26 @@ export function EdgePropertyPanel() {
           </div>
           <span className="font-medium text-white">Connector</span>
         </div>
-        <button
-          onClick={() => setSelectedEdgeId(null)}
-          className="p-1 hover:bg-arch-surface-light rounded transition-colors"
-        >
-          <X size={18} className="text-gray-400" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={togglePropertyPanelPinned}
+            className={`p-1 rounded transition-colors ${
+              isPropertyPanelPinned 
+                ? 'bg-arch-primary/20 text-arch-primary' 
+                : 'hover:bg-arch-surface-light text-gray-400'
+            }`}
+            title={isPropertyPanelPinned ? 'Unpin panel' : 'Pin panel open'}
+          >
+            {isPropertyPanelPinned ? <Pin size={14} /> : <PinOff size={14} />}
+          </button>
+          <button
+            onClick={() => setSelectedEdgeId(null)}
+            className="p-1 hover:bg-arch-surface-light rounded transition-colors"
+            title="Deselect edge"
+          >
+            <X size={18} className="text-gray-400" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -132,24 +139,17 @@ export function EdgePropertyPanel() {
         {/* Styling Section */}
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-            Styling
+            Line Styling
           </h3>
           <div className="space-y-4">
             {/* Stroke Color */}
-            <div>
-              <label className="block text-sm text-gray-300 mb-2">Stroke Color</label>
-              <div className="flex flex-wrap gap-2">
-                {EDGE_COLOR_PRESETS.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => handleStyleUpdate({ stroke: color })}
-                    className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110
-                      ${strokeColor === color ? 'border-white' : 'border-transparent'}`}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
+            <ColorPicker
+              value={strokeColor}
+              onChange={(color) => handleStyleUpdate({ stroke: color })}
+              label="Stroke Color"
+              showGrayscale
+              showCustomInput
+            />
 
             {/* Stroke Width */}
             <div>
@@ -158,8 +158,8 @@ export function EdgePropertyPanel() {
               </label>
               <input
                 type="range"
-                min="1"
-                max="8"
+                min={globalSettings.lineWidthRange.min}
+                max={globalSettings.lineWidthRange.max}
                 value={strokeWidth}
                 onChange={(e) => handleStyleUpdate({ strokeWidth: parseInt(e.target.value) })}
                 className="w-full accent-arch-primary"
@@ -187,27 +187,80 @@ export function EdgePropertyPanel() {
                 ))}
               </div>
             </div>
+          </div>
+        </section>
 
-            {/* Animation Toggle */}
+        {/* Arrow Head Section */}
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Arrow Head
+          </h3>
+          <div className="space-y-4">
+            {/* Arrow Head Style */}
             <div>
-              <label className="flex items-center gap-3 cursor-pointer">
+              <label className="block text-sm text-gray-300 mb-2">Arrow Style</label>
+              <div className="grid grid-cols-3 gap-2">
+                {ARROW_HEAD_STYLES.map((style) => (
+                  <button
+                    key={style.value}
+                    onClick={() => handleDataUpdate('arrowHeadStyle', style.value)}
+                    className={`
+                      px-2 py-2 rounded-lg border transition-all text-xs font-medium
+                      ${arrowHeadStyle === style.value
+                        ? 'border-arch-primary bg-arch-primary/10 text-arch-primary'
+                        : 'border-arch-border bg-arch-bg text-gray-400 hover:border-gray-600'
+                      }
+                    `}
+                  >
+                    {style.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Arrow Head Size */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">
+                Arrow Size: {arrowHeadSize.toFixed(1)}x
+              </label>
+              <input
+                type="range"
+                min={globalSettings.arrowHeadSizeRange.min * 10}
+                max={globalSettings.arrowHeadSizeRange.max * 10}
+                value={arrowHeadSize * 10}
+                onChange={(e) => handleDataUpdate('arrowHeadSize', parseInt(e.target.value) / 10)}
+                className="w-full accent-arch-primary"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Scales proportionally with line thickness
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Animation Section */}
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Animation
+          </h3>
+          <div>
+            <label className="flex items-center gap-3 cursor-pointer">
+              <div
+                className={`
+                  w-12 h-6 rounded-full transition-colors relative cursor-pointer
+                  ${isAnimated ? 'bg-arch-primary' : 'bg-arch-border'}
+                `}
+                onClick={handleAnimationToggle}
+              >
                 <div
                   className={`
-                    w-12 h-6 rounded-full transition-colors relative cursor-pointer
-                    ${isAnimated ? 'bg-arch-primary' : 'bg-arch-border'}
+                    absolute top-1 w-4 h-4 rounded-full bg-white transition-transform
+                    ${isAnimated ? 'translate-x-7' : 'translate-x-1'}
                   `}
-                  onClick={handleAnimationToggle}
-                >
-                  <div
-                    className={`
-                      absolute top-1 w-4 h-4 rounded-full bg-white transition-transform
-                      ${isAnimated ? 'translate-x-7' : 'translate-x-1'}
-                    `}
-                  />
-                </div>
-                <span className="text-sm text-gray-300">Animated</span>
-              </label>
-            </div>
+                />
+              </div>
+              <span className="text-sm text-gray-300">Animated Flow</span>
+            </label>
           </div>
         </section>
       </div>

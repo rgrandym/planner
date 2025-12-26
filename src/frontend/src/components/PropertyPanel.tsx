@@ -1,25 +1,15 @@
 import { NODE_TYPE_MAP } from '@/config/nodes';
 import { useFlowStore } from '@/store/flowStore';
+import { useGlobalSettingsStore } from '@/store/globalSettingsStore';
+import { useUIStore } from '@/store/uiStore';
 import { ArchNodeData, NodeCategory } from '@/types';
-import { Box, Copy, Trash2, X } from 'lucide-react';
+import { Box, Copy, PanelRightClose, Pin, PinOff, Trash2, X } from 'lucide-react';
 import { useMemo } from 'react';
-
-/**
- * Color presets for the color picker
- */
-const COLOR_PRESETS = [
-  '#8b5cf6', // Purple
-  '#3b82f6', // Blue
-  '#06b6d4', // Cyan
-  '#10b981', // Green
-  '#f59e0b', // Amber
-  '#ef4444', // Red
-  '#ec4899', // Pink
-  '#6366f1', // Indigo
-];
+import { ColorPicker } from './ColorPicker';
 
 /**
  * Get metadata fields based on node category
+ * Note: Removed AI-ML model/apiKey as this app doesn't use those features
  */
 function getMetadataFields(category: NodeCategory): { key: string; label: string; placeholder: string }[] {
   switch (category) {
@@ -37,11 +27,6 @@ function getMetadataFields(category: NodeCategory): { key: string; label: string
       return [
         { key: 'filePath', label: 'File Path', placeholder: '/data/file.csv' },
       ];
-    case 'ai-ml':
-      return [
-        { key: 'model', label: 'Model Name', placeholder: 'gpt-4' },
-        { key: 'apiKey', label: 'API Key (Reference)', placeholder: 'OPENAI_API_KEY' },
-      ];
     default:
       return [];
   }
@@ -58,18 +43,45 @@ function getMetadataFields(category: NodeCategory): { key: string; label: string
  */
 export function PropertyPanel() {
   const { nodes, selectedNodeId, updateNode, duplicateNode, deleteNode, setSelectedNodeId } = useFlowStore();
+  const globalSettings = useGlobalSettingsStore();
+  const { isPropertyPanelPinned, togglePropertyPanelPinned, toggleRightPanel } = useUIStore();
 
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId),
     [nodes, selectedNodeId]
   );
 
+  // Show empty state when nothing selected and panel is pinned
   if (!selectedNode) {
     return (
-      <aside className="w-72 bg-arch-surface border-l border-arch-border p-4">
-        <div className="h-full flex items-center justify-center">
+      <aside className="w-72 bg-arch-surface border-l border-arch-border flex flex-col h-full">
+        {/* Header with controls */}
+        <div className="p-4 border-b border-arch-border flex items-center justify-between">
+          <span className="text-sm font-medium text-gray-400">Properties</span>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={togglePropertyPanelPinned}
+              className={`p-1.5 rounded transition-colors ${
+                isPropertyPanelPinned 
+                  ? 'bg-arch-primary/20 text-arch-primary' 
+                  : 'hover:bg-arch-surface-light text-gray-400'
+              }`}
+              title={isPropertyPanelPinned ? 'Unpin panel' : 'Pin panel open'}
+            >
+              {isPropertyPanelPinned ? <Pin size={16} /> : <PinOff size={16} />}
+            </button>
+            <button
+              onClick={toggleRightPanel}
+              className="p-1.5 hover:bg-arch-surface-light rounded transition-colors"
+              title="Hide panel"
+            >
+              <PanelRightClose size={16} className="text-gray-400" />
+            </button>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
           <p className="text-gray-500 text-sm text-center">
-            Select a node to view its properties
+            Select a node or edge to view its properties
           </p>
         </div>
       </aside>
@@ -109,14 +121,28 @@ export function PropertyPanel() {
           >
             <Icon size={18} color={data.color} />
           </div>
-          <span className="font-medium text-white">{data.nodeType}</span>
+          <span className="font-medium text-white truncate max-w-[120px]">{data.nodeType}</span>
         </div>
-        <button
-          onClick={() => setSelectedNodeId(null)}
-          className="p-1 hover:bg-arch-surface-light rounded transition-colors"
-        >
-          <X size={18} className="text-gray-400" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={togglePropertyPanelPinned}
+            className={`p-1 rounded transition-colors ${
+              isPropertyPanelPinned 
+                ? 'bg-arch-primary/20 text-arch-primary' 
+                : 'hover:bg-arch-surface-light text-gray-400'
+            }`}
+            title={isPropertyPanelPinned ? 'Unpin panel' : 'Pin panel open'}
+          >
+            {isPropertyPanelPinned ? <Pin size={14} /> : <PinOff size={14} />}
+          </button>
+          <button
+            onClick={() => setSelectedNodeId(null)}
+            className="p-1 hover:bg-arch-surface-light rounded transition-colors"
+            title="Deselect node"
+          >
+            <X size={18} className="text-gray-400" />
+          </button>
+        </div>
       </div>
 
       {/* Content */}
@@ -160,20 +186,13 @@ export function PropertyPanel() {
           </h3>
           <div className="space-y-4">
             {/* Color Picker */}
-            <div>
-              <label className="block text-sm text-gray-300 mb-2">Border Color</label>
-              <div className="flex flex-wrap gap-2">
-                {COLOR_PRESETS.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => handleUpdate('borderColor', color)}
-                    className={`w-6 h-6 rounded-full border-2 transition-transform hover:scale-110
-                      ${data.borderColor === color ? 'border-white' : 'border-transparent'}`}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
+            <ColorPicker
+              value={data.borderColor || data.color}
+              onChange={(color) => handleUpdate('borderColor', color)}
+              label="Border Color"
+              showGrayscale
+              showCustomInput
+            />
 
             {/* Border Width */}
             <div>
@@ -208,13 +227,13 @@ export function PropertyPanel() {
             {/* Font Size */}
             <div>
               <label className="block text-sm text-gray-300 mb-2">
-                Font Size: {data.fontSize ?? 14}px
+                Font Size: {data.fontSize ?? globalSettings.defaultFontSize}px
               </label>
               <input
                 type="range"
-                min="12"
-                max="24"
-                value={data.fontSize ?? 14}
+                min={globalSettings.fontSizeRange.min}
+                max={globalSettings.fontSizeRange.max}
+                value={data.fontSize ?? globalSettings.defaultFontSize}
                 onChange={(e) => handleUpdate('fontSize', parseInt(e.target.value))}
                 className="w-full accent-arch-primary"
               />
@@ -223,13 +242,13 @@ export function PropertyPanel() {
             {/* Icon Size */}
             <div>
               <label className="block text-sm text-gray-300 mb-2">
-                Icon Size: {data.iconSize ?? 20}px
+                Icon Size: {data.iconSize ?? globalSettings.defaultIconSize}px
               </label>
               <input
                 type="range"
-                min="12"
-                max="40"
-                value={data.iconSize ?? 20}
+                min={globalSettings.iconSizeRange.min}
+                max={globalSettings.iconSizeRange.max}
+                value={data.iconSize ?? globalSettings.defaultIconSize}
                 onChange={(e) => handleUpdate('iconSize', parseInt(e.target.value))}
                 className="w-full accent-arch-primary"
               />

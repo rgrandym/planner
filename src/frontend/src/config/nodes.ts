@@ -1,5 +1,6 @@
 import { CategoryConfig, NodeCategory, NodeTypeConfig } from '@/types';
 import {
+    AlignLeft,
     Binary,
     Bot,
     Braces,
@@ -39,6 +40,7 @@ import {
     Share2,
     Sigma,
     Sparkles,
+    StickyNote,
     Table,
     Terminal,
     TextCursorInput,
@@ -69,6 +71,7 @@ export const CATEGORY_COLORS: Record<NodeCategory, string> = {
   'processing': '#f97316',
   'memory': '#22d3ee',
   'tools': '#a3e635',
+  'annotations': '#fbbf24',
   'custom': '#a855f7',
 };
 
@@ -230,6 +233,16 @@ export const NODE_CATEGORIES: CategoryConfig[] = [
       { type: 'Retriever', label: 'Retriever', icon: FileSearch, category: 'tools', color: CATEGORY_COLORS['tools'] },
       { type: 'Orchestrator', label: 'Orchestrator', icon: Settings, category: 'tools', color: CATEGORY_COLORS['tools'] },
       { type: 'ToolChain', label: 'Tool Chain', icon: Hammer, category: 'tools', color: CATEGORY_COLORS['tools'] },
+    ],
+  },
+  {
+    id: 'annotations',
+    label: 'Annotations',
+    color: CATEGORY_COLORS['annotations'],
+    nodes: [
+      { type: 'TextLabel', label: 'Text Label', icon: AlignLeft, category: 'annotations', color: CATEGORY_COLORS['annotations'], isTextLabel: true },
+      { type: 'Note', label: 'Note', icon: StickyNote, category: 'annotations', color: CATEGORY_COLORS['annotations'], isTextLabel: true },
+      { type: 'Title', label: 'Title', icon: Type, category: 'annotations', color: CATEGORY_COLORS['annotations'], isTextLabel: true },
     ],
   },
 ];

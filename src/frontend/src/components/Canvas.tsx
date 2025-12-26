@@ -12,11 +12,14 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import { CATEGORY_COLORS } from '@/config/nodes';
-import { BaseNode } from '@/nodes';
+import { BaseNode, TextLabelNode } from '@/nodes';
 import { useFlowStore } from '@/store/flowStore';
+import { useGlobalSettingsStore } from '@/store/globalSettingsStore';
 import { useProjectStore } from '@/store/projectStore';
 import { useThemeStore } from '@/store/themeStore';
+import { useUIStore } from '@/store/uiStore';
 import { ArchNodeData, NodeTypeConfig } from '@/types';
+import { Map } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ContextMenu } from './ContextMenu';
 import { CustomEdge } from './CustomEdge';
@@ -30,6 +33,7 @@ import { Toolbar } from './Toolbar';
  */
 const nodeTypes: NodeTypes = {
   baseNode: BaseNode,
+  textLabel: TextLabelNode,
 };
 
 /**
@@ -37,21 +41,6 @@ const nodeTypes: NodeTypes = {
  */
 const edgeTypes: EdgeTypes = {
   custom: CustomEdge,
-};
-
-/**
- * Default edge options for new connections
- */
-const defaultEdgeOptions = {
-  type: 'custom',
-  style: {
-    stroke: '#06b6d4',
-    strokeWidth: 2,
-  },
-  animated: false,
-  data: {
-    lineStyle: 'solid',
-  },
 };
 
 /**
@@ -114,6 +103,8 @@ export function Canvas() {
   } = useProjectStore();
 
   const { mode } = useThemeStore();
+  const { isMinimapVisible, toggleMinimap } = useUIStore();
+  const globalSettings = useGlobalSettingsStore();
   const isDarkMode = mode === 'dark';
 
   // Theme-adaptive colors
@@ -121,6 +112,21 @@ export function Canvas() {
   const dotColor = isDarkMode ? '#333333' : '#d1d5db';
   const controlsBg = isDarkMode ? 'bg-arch-surface' : 'bg-white';
   const controlsBorder = isDarkMode ? 'border-arch-border' : 'border-gray-200';
+
+  // Default edge options using global settings
+  const defaultEdgeOptions = {
+    type: 'custom',
+    style: {
+      stroke: globalSettings.defaultLineColor,
+      strokeWidth: globalSettings.defaultLineWidth,
+    },
+    animated: false,
+    data: {
+      lineStyle: globalSettings.defaultLineStyle,
+      arrowHeadSize: globalSettings.defaultArrowHeadSize,
+      arrowHeadStyle: globalSettings.defaultArrowHeadStyle,
+    },
+  };
 
   /**
    * Handle initialization of React Flow instance
@@ -191,25 +197,56 @@ export function Canvas() {
         y: event.clientY,
       });
 
-      const newNode: Node<ArchNodeData> = {
-        id: `${nodeType.type}_${Date.now()}`,
-        type: 'baseNode',
-        position,
-        data: {
-          label: nodeType.label,
-          nodeType: nodeType.type,
-          icon: nodeType.icon,
-          color: nodeType.color,
-          category: nodeType.category,
-          description: '',
-          opacity: 90,
-          fontSize: 14,
-        },
-      };
+      // Check if this is a text label node
+      if (nodeType.isTextLabel) {
+        const newNode: Node<ArchNodeData> = {
+          id: `${nodeType.type}_${Date.now()}`,
+          type: 'textLabel',
+          position,
+          data: {
+            label: nodeType.label,
+            nodeType: nodeType.type,
+            icon: nodeType.icon,
+            color: nodeType.color,
+            category: nodeType.category,
+            text: nodeType.type === 'Title' ? 'Title' : 'Double-click to edit',
+            fontSize: nodeType.type === 'Title' ? 24 : globalSettings.defaultFontSize,
+            textColor: '#ffffff',
+            backgroundColor: 'transparent',
+            backgroundOpacity: 100,
+            borderColor: 'transparent',
+            borderWidth: 0,
+            padding: 12,
+            textAlign: 'left',
+            fontWeight: nodeType.type === 'Title' ? 'bold' : 'normal',
+            autoFit: true,
+          } as unknown as ArchNodeData,
+        };
+        addNode(newNode);
+      } else {
+        const newNode: Node<ArchNodeData> = {
+          id: `${nodeType.type}_${Date.now()}`,
+          type: 'baseNode',
+          position,
+          data: {
+            label: nodeType.label,
+            nodeType: nodeType.type,
+            icon: nodeType.icon,
+            color: globalSettings.defaultNodeColor,
+            category: nodeType.category,
+            description: '',
+            opacity: globalSettings.defaultNodeOpacity,
+            fontSize: globalSettings.defaultFontSize,
+            borderColor: globalSettings.defaultBorderColor,
+            borderWidth: globalSettings.defaultBorderWidth,
+            iconSize: globalSettings.defaultIconSize,
+          },
+        };
 
-      addNode(newNode);
+        addNode(newNode);
+      }
     },
-    [addNode]
+    [addNode, globalSettings]
   );
 
   /**
@@ -448,15 +485,34 @@ export function Canvas() {
           className={`!${controlsBg} !${controlsBorder} !rounded-lg !shadow-lg`}
           showInteractive={false}
         />
-        <MiniMap
-          className="!bg-arch-surface !border-arch-border !rounded-lg"
-          nodeColor={(node) => {
-            const data = node.data as ArchNodeData;
-            return data.color || CATEGORY_COLORS['infrastructure'];
-          }}
-          maskColor="rgba(0, 0, 0, 0.8)"
-        />
+        
+        {/* Minimap with toggle */}
+        {isMinimapVisible && (
+          <MiniMap
+            className="!bg-arch-surface !border-arch-border !rounded-lg"
+            nodeColor={(node) => {
+              const data = node.data as ArchNodeData;
+              return data.color || CATEGORY_COLORS['infrastructure'];
+            }}
+            maskColor="rgba(0, 0, 0, 0.8)"
+          />
+        )}
       </ReactFlow>
+
+      {/* Minimap Toggle Button */}
+      <button
+        onClick={toggleMinimap}
+        className={`absolute bottom-4 right-4 z-10 p-2 rounded-lg transition-colors shadow-lg
+          ${isDarkMode 
+            ? 'bg-arch-surface hover:bg-arch-surface-light border border-arch-border' 
+            : 'bg-white hover:bg-gray-100 border border-gray-200'
+          }
+          ${isMinimapVisible ? '' : 'ring-2 ring-arch-primary'}
+        `}
+        title={isMinimapVisible ? 'Hide minimap' : 'Show minimap'}
+      >
+        <Map size={18} className={isDarkMode ? 'text-gray-300' : 'text-gray-600'} />
+      </button>
 
       <Toolbar />
       <ContextMenu />

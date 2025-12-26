@@ -1,5 +1,6 @@
 import { NODE_CATEGORIES } from '@/config/nodes';
 import { useFlowStore } from '@/store/flowStore';
+import { useGlobalSettingsStore } from '@/store/globalSettingsStore';
 import { ArchNodeData, NodeTypeConfig } from '@/types';
 import { Search, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -27,6 +28,7 @@ export function QuickConnectMenu({
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { addNode, connectNodes, getNodeById } = useFlowStore();
+  const globalSettings = useGlobalSettingsStore();
 
   // Focus search input when menu opens
   useEffect(() => {
@@ -91,7 +93,7 @@ export function QuickConnectMenu({
       y: sourceNode.position.y,
     };
 
-    // Create the new node
+    // Create the new node with global settings
     const newNode: Node<ArchNodeData> = {
       id: `${nodeConfig.type}_${Date.now()}`,
       type: 'baseNode',
@@ -100,8 +102,13 @@ export function QuickConnectMenu({
         label: nodeConfig.label,
         nodeType: nodeConfig.type,
         icon: nodeConfig.icon,
-        color: nodeConfig.color,
+        color: globalSettings.defaultNodeColor,
         category: nodeConfig.category,
+        opacity: globalSettings.defaultNodeOpacity,
+        fontSize: globalSettings.defaultFontSize,
+        borderColor: globalSettings.defaultBorderColor,
+        borderWidth: globalSettings.defaultBorderWidth,
+        iconSize: globalSettings.defaultIconSize,
       },
     };
 

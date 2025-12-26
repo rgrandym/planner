@@ -108,6 +108,23 @@ interface FlowStore {
   // Quick connect actions
   getNodeById: (nodeId: string) => Node<ArchNodeData> | undefined;
   connectNodes: (sourceId: string, targetId: string) => void;
+
+  // Bulk update actions for applying settings
+  applyFontSettingsToAllNodes: (fontSize: number) => void;
+  applyLineSettingsToAllEdges: (settings: {
+    lineColor?: string;
+    lineWidth?: number;
+    lineStyle?: string;
+    arrowHeadSize?: number;
+    arrowHeadStyle?: string;
+  }) => void;
+  applyNodeSettingsToAllNodes: (settings: {
+    iconSize?: number;
+    opacity?: number;
+    borderWidth?: number;
+    color?: string;
+    borderColor?: string;
+  }) => void;
 }
 
 /**
@@ -508,6 +525,68 @@ export const useFlowStore = create<FlowStore>()(
       };
       set((state) => ({
         edges: [...state.edges, newEdge],
+        isDirty: true,
+      }));
+    },
+
+    /**
+     * Apply font settings to all existing nodes
+     */
+    applyFontSettingsToAllNodes: (fontSize) => {
+      get().saveToUndoStack();
+      set((state) => ({
+        nodes: state.nodes.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            fontSize,
+          },
+        })),
+        isDirty: true,
+      }));
+    },
+
+    /**
+     * Apply line settings to all existing edges
+     */
+    applyLineSettingsToAllEdges: (settings) => {
+      get().saveToUndoStack();
+      set((state) => ({
+        edges: state.edges.map((edge) => ({
+          ...edge,
+          style: {
+            ...edge.style,
+            ...(settings.lineColor && { stroke: settings.lineColor }),
+            ...(settings.lineWidth && { strokeWidth: settings.lineWidth }),
+          },
+          data: {
+            ...edge.data,
+            ...(settings.lineStyle && { lineStyle: settings.lineStyle }),
+            ...(settings.arrowHeadSize && { arrowHeadSize: settings.arrowHeadSize }),
+            ...(settings.arrowHeadStyle && { arrowHeadStyle: settings.arrowHeadStyle }),
+          },
+        })),
+        isDirty: true,
+      }));
+    },
+
+    /**
+     * Apply node visual settings to all existing nodes
+     */
+    applyNodeSettingsToAllNodes: (settings) => {
+      get().saveToUndoStack();
+      set((state) => ({
+        nodes: state.nodes.map((node) => ({
+          ...node,
+          data: {
+            ...node.data,
+            ...(settings.iconSize !== undefined && { iconSize: settings.iconSize }),
+            ...(settings.opacity !== undefined && { opacity: settings.opacity }),
+            ...(settings.borderWidth !== undefined && { borderWidth: settings.borderWidth }),
+            ...(settings.color !== undefined && { color: settings.color }),
+            ...(settings.borderColor !== undefined && { borderColor: settings.borderColor }),
+          },
+        })),
         isDirty: true,
       }));
     },
