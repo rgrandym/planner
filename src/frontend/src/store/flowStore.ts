@@ -51,12 +51,14 @@ interface FlowStore {
   edges: Edge[];
   viewport: Viewport;
   selectedNodeId: string | null;
+  selectedEdgeId: string | null;
   contextMenu: ContextMenuState | null;
   isExportModalOpen: boolean;
   copiedNode: Node<ArchNodeData> | null;
   undoStack: { nodes: Node<ArchNodeData>[]; edges: Edge[] }[];
   redoStack: { nodes: Node<ArchNodeData>[]; edges: Edge[] }[];
   isProjectModalOpen: boolean;
+  isSettingsModalOpen: boolean;
   isDirty: boolean;
 
   // Node actions
@@ -68,9 +70,11 @@ interface FlowStore {
   deleteNode: (nodeId: string) => void;
   duplicateNode: (nodeId: string) => void;
   removeEdge: (edgeId: string) => void;
+  updateEdge: (edgeId: string, data: Partial<Edge>) => void;
 
   // Selection actions
   setSelectedNodeId: (nodeId: string | null) => void;
+  setSelectedEdgeId: (edgeId: string | null) => void;
 
   // Context menu actions
   setContextMenu: (menu: ContextMenuState | null) => void;
@@ -80,6 +84,9 @@ interface FlowStore {
 
   // Project modal actions
   setProjectModalOpen: (open: boolean) => void;
+
+  // Settings modal actions
+  setSettingsModalOpen: (open: boolean) => void;
 
   // Viewport actions
   setViewport: (viewport: Viewport) => void;
@@ -114,9 +121,11 @@ export const useFlowStore = create<FlowStore>()(
     edges: [],
     viewport: { x: 0, y: 0, zoom: 1 },
     selectedNodeId: null,
+    selectedEdgeId: null,
     contextMenu: null,
     isExportModalOpen: false,
     isProjectModalOpen: false,
+    isSettingsModalOpen: false,
     copiedNode: null,
     undoStack: [],
     redoStack: [],
@@ -144,18 +153,55 @@ export const useFlowStore = create<FlowStore>()(
 
     /**
      * Handle new connections between nodes
+     * Uses distributed handle positions for multiple connections
      */
     onConnect: (connection: Connection) => {
       get().saveToUndoStack();
+      
+      // Get existing edges to determine handle distribution
+      const existingEdges = get().edges;
+      const sourceId = connection.source;
+      const targetId = connection.target;
+      
+      // Count existing connections from this source to any target
+      const outgoingFromSource = existingEdges.filter(e => e.source === sourceId);
+      
+      // Determine which source handle to use based on existing connections
+      const sourceHandles = ['right-source', 'bottom-source', 'top-source', 'left-source'];
+      const usedSourceHandles = new Set(outgoingFromSource.map(e => e.sourceHandle));
+      
+      // Find an unused handle or cycle through
+      let sourceHandle = connection.sourceHandle;
+      if (!sourceHandle) {
+        sourceHandle = sourceHandles.find(h => !usedSourceHandles.has(h)) || 
+          sourceHandles[outgoingFromSource.length % sourceHandles.length];
+      }
+      
+      // Count existing connections to this target
+      const incomingToTarget = existingEdges.filter(e => e.target === targetId);
+      const targetHandles = ['left-target', 'top-target', 'bottom-target', 'right-target'];
+      const usedTargetHandles = new Set(incomingToTarget.map(e => e.targetHandle));
+      
+      let targetHandle = connection.targetHandle;
+      if (!targetHandle) {
+        targetHandle = targetHandles.find(h => !usedTargetHandles.has(h)) ||
+          targetHandles[incomingToTarget.length % targetHandles.length];
+      }
+      
       set({
         edges: addEdge(
           {
             ...connection,
-            type: 'smoothstep',
+            sourceHandle,
+            targetHandle,
+            type: 'custom',
             animated: false,
             style: {
               stroke: '#06b6d4',
               strokeWidth: 2,
+            },
+            data: {
+              lineStyle: 'solid',
             },
           },
           get().edges
@@ -243,7 +289,28 @@ export const useFlowStore = create<FlowStore>()(
      * Set the currently selected node
      */
     setSelectedNodeId: (nodeId) => {
-      set({ selectedNodeId: nodeId });
+      set({ selectedNodeId: nodeId, selectedEdgeId: null });
+    },
+
+    /**
+     * Set the currently selected edge
+     */
+    setSelectedEdgeId: (edgeId) => {
+      set({ selectedEdgeId: edgeId, selectedNodeId: null });
+    },
+
+    /**
+     * Update edge by ID
+     */
+    updateEdge: (edgeId, data) => {
+      set((state) => ({
+        edges: state.edges.map((edge) =>
+          edge.id === edgeId
+            ? { ...edge, ...data }
+            : edge
+        ),
+        isDirty: true,
+      }));
     },
 
     /**
@@ -265,6 +332,13 @@ export const useFlowStore = create<FlowStore>()(
      */
     setProjectModalOpen: (open) => {
       set({ isProjectModalOpen: open });
+    },
+
+    /**
+     * Toggle settings modal
+     */
+    setSettingsModalOpen: (open) => {
+      set({ isSettingsModalOpen: open });
     },
 
     /**
@@ -394,18 +468,42 @@ export const useFlowStore = create<FlowStore>()(
 
     /**
      * Connect two nodes programmatically
+     * Uses distributed handle positions for multiple connections
      */
     connectNodes: (sourceId, targetId) => {
       get().saveToUndoStack();
+      
+      const existingEdges = get().edges;
+      
+      // Determine handles based on existing connections
+      const outgoingFromSource = existingEdges.filter(e => e.source === sourceId);
+      const incomingToTarget = existingEdges.filter(e => e.target === targetId);
+      
+      const sourceHandles = ['right-source', 'bottom-source', 'top-source', 'left-source'];
+      const targetHandles = ['left-target', 'top-target', 'bottom-target', 'right-target'];
+      
+      const usedSourceHandles = new Set(outgoingFromSource.map(e => e.sourceHandle));
+      const usedTargetHandles = new Set(incomingToTarget.map(e => e.targetHandle));
+      
+      const sourceHandle = sourceHandles.find(h => !usedSourceHandles.has(h)) || 
+        sourceHandles[outgoingFromSource.length % sourceHandles.length];
+      const targetHandle = targetHandles.find(h => !usedTargetHandles.has(h)) ||
+        targetHandles[incomingToTarget.length % targetHandles.length];
+      
       const newEdge: Edge = {
         id: `edge_${sourceId}_${targetId}_${Date.now()}`,
         source: sourceId,
         target: targetId,
-        type: 'smoothstep',
+        sourceHandle,
+        targetHandle,
+        type: 'custom',
         animated: false,
         style: {
           stroke: '#06b6d4',
           strokeWidth: 2,
+        },
+        data: {
+          lineStyle: 'solid',
         },
       };
       set((state) => ({

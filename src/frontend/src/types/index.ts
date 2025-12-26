@@ -12,7 +12,21 @@ export type NodeCategory =
   | 'logic'
   | 'infrastructure'
   | 'integrations'
-  | 'communication';
+  | 'communication'
+  | 'processing'
+  | 'memory'
+  | 'tools'
+  | 'custom';
+
+/**
+ * Available node shapes
+ */
+export type NodeShape = 
+  | 'rectangle'
+  | 'circle'
+  | 'diamond'
+  | 'hexagon'
+  | 'rounded';
 
 /**
  * Configuration for a node type in the palette
@@ -30,6 +44,10 @@ export interface NodeTypeConfig {
   color: string;
   /** Optional description shown in property panel */
   description?: string;
+  /** Optional shape override */
+  shape?: NodeShape;
+  /** Whether this is a custom user-created node */
+  isCustom?: boolean;
 }
 
 /**
@@ -52,13 +70,26 @@ export interface ArchNodeData {
   metadata?: Record<string, string>;
   /** Custom border color override */
   borderColor?: string;
+  /** Border thickness (1-8) */
+  borderWidth?: number;
   /** Background opacity (0-100) */
   opacity?: number;
   /** Label font size (12-24) */
   fontSize?: number;
   /** Icon size (12-40) */
   iconSize?: number;
+  /** Node shape */
+  shape?: NodeShape;
+  /** Custom width (50-400) */
+  width?: number;
+  /** Custom height (50-400) */
+  height?: number;
 }
+
+/**
+ * Edge line style types
+ */
+export type EdgeLineStyle = 'solid' | 'dashed' | 'dotted';
 
 /**
  * Custom node type extending React Flow's Node
@@ -73,6 +104,11 @@ export type ArchEdge = Edge & {
   animated?: boolean;
   /** Edge style customization */
   style?: React.CSSProperties;
+  /** Edge line style */
+  data?: {
+    lineStyle?: EdgeLineStyle;
+    strokeWidth?: number;
+  };
 };
 
 /**

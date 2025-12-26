@@ -1,39 +1,56 @@
 import { CategoryConfig, NodeCategory, NodeTypeConfig } from '@/types';
 import {
+    Binary,
     Bot,
     Braces,
     Brain,
+    Calculator,
     Circle,
     Clock,
     Cloud,
     Cpu,
     Cylinder,
     Database,
+    Eye,
     FileCode,
+    FileSearch,
     FileText,
     Filter,
+    FormInput,
     GitBranch,
     GitMerge,
     Globe,
+    Hammer,
     HardDrive,
     Hash,
     Image,
     Layers,
+    LayoutGrid,
     List,
     Mail,
     Map,
+    MemoryStick,
     MessageSquare,
     Puzzle,
     RotateCw,
+    ScanText,
     Server,
+    Settings,
     Share2,
+    Sigma,
+    Sparkles,
     Table,
+    Terminal,
+    TextCursorInput,
     ToggleLeft,
     Type,
     User,
     Users,
+    Video,
+    Wand2,
     Warehouse,
     Webhook,
+    Wrench,
     Zap,
 } from 'lucide-react';
 
@@ -49,6 +66,10 @@ export const CATEGORY_COLORS: Record<NodeCategory, string> = {
   'infrastructure': '#06b6d4',
   'integrations': '#ec4899',
   'communication': '#14b8a6',
+  'processing': '#f97316',
+  'memory': '#22d3ee',
+  'tools': '#a3e635',
+  'custom': '#a855f7',
 };
 
 /**
@@ -67,6 +88,25 @@ export const NODE_CATEGORIES: CategoryConfig[] = [
       { type: 'InferenceAPI', label: 'Inference API', icon: Zap, category: 'ai-ml', color: CATEGORY_COLORS['ai-ml'] },
       { type: 'PromptTemplate', label: 'Prompt Template', icon: FileText, category: 'ai-ml', color: CATEGORY_COLORS['ai-ml'] },
       { type: 'RAG', label: 'RAG Pipeline', icon: Layers, category: 'ai-ml', color: CATEGORY_COLORS['ai-ml'] },
+      { type: 'VLM', label: 'Vision LM (VLM)', icon: Eye, category: 'ai-ml', color: CATEGORY_COLORS['ai-ml'] },
+      { type: 'Embedding', label: 'Embeddings', icon: Binary, category: 'ai-ml', color: CATEGORY_COLORS['ai-ml'] },
+      { type: 'FineTuning', label: 'Fine-Tuning', icon: Wand2, category: 'ai-ml', color: CATEGORY_COLORS['ai-ml'] },
+    ],
+  },
+  {
+    id: 'processing',
+    label: 'Processing',
+    color: CATEGORY_COLORS['processing'],
+    nodes: [
+      { type: 'OCR', label: 'OCR', icon: ScanText, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'TextProcessing', label: 'Text Processing', icon: TextCursorInput, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'ImageProcessing', label: 'Image Processing', icon: Sparkles, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'VideoProcessing', label: 'Video Processing', icon: Video, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'TableExtraction', label: 'Table Extraction', icon: LayoutGrid, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'FormulaParser', label: 'Formula Parser', icon: Sigma, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'DataParser', label: 'Data Parser', icon: FileSearch, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'Calculator', label: 'Calculator', icon: Calculator, category: 'processing', color: CATEGORY_COLORS['processing'] },
+      { type: 'FormExtraction', label: 'Form Extraction', icon: FormInput, category: 'processing', color: CATEGORY_COLORS['processing'] },
     ],
   },
   {
@@ -160,10 +200,43 @@ export const NODE_CATEGORIES: CategoryConfig[] = [
       { type: 'LoadBalancer', label: 'Load Balancer', icon: Share2, category: 'infrastructure', color: CATEGORY_COLORS['infrastructure'] },
     ],
   },
+  {
+    id: 'memory',
+    label: 'Memory',
+    color: CATEGORY_COLORS['memory'],
+    nodes: [
+      { type: 'ShortTermMemory', label: 'Short-Term Memory', icon: MemoryStick, category: 'memory', color: CATEGORY_COLORS['memory'] },
+      { type: 'LongTermMemory', label: 'Long-Term Memory', icon: Database, category: 'memory', color: CATEGORY_COLORS['memory'] },
+      { type: 'WorkingMemory', label: 'Working Memory', icon: Cpu, category: 'memory', color: CATEGORY_COLORS['memory'] },
+      { type: 'EpisodicMemory', label: 'Episodic Memory', icon: Clock, category: 'memory', color: CATEGORY_COLORS['memory'] },
+      { type: 'SemanticMemory', label: 'Semantic Memory', icon: Brain, category: 'memory', color: CATEGORY_COLORS['memory'] },
+      { type: 'ContextWindow', label: 'Context Window', icon: Layers, category: 'memory', color: CATEGORY_COLORS['memory'] },
+      { type: 'ConversationBuffer', label: 'Conversation Buffer', icon: MessageSquare, category: 'memory', color: CATEGORY_COLORS['memory'] },
+      { type: 'SummaryMemory', label: 'Summary Memory', icon: FileText, category: 'memory', color: CATEGORY_COLORS['memory'] },
+    ],
+  },
+  {
+    id: 'tools',
+    label: 'Tools & Utilities',
+    color: CATEGORY_COLORS['tools'],
+    nodes: [
+      { type: 'SearchTool', label: 'Search Tool', icon: FileSearch, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'CodeExecutor', label: 'Code Executor', icon: Terminal, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'FileManager', label: 'File Manager', icon: FileCode, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'WebBrowser', label: 'Web Browser', icon: Globe, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'Calculator', label: 'Calculator Tool', icon: Calculator, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'APITool', label: 'API Tool', icon: Webhook, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'CustomTool', label: 'Custom Tool', icon: Wrench, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'Retriever', label: 'Retriever', icon: FileSearch, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'Orchestrator', label: 'Orchestrator', icon: Settings, category: 'tools', color: CATEGORY_COLORS['tools'] },
+      { type: 'ToolChain', label: 'Tool Chain', icon: Hammer, category: 'tools', color: CATEGORY_COLORS['tools'] },
+    ],
+  },
 ];
 
 /**
  * Flat map of all node types for quick lookup
+ * Note: Custom nodes are added dynamically via customNodesStore
  */
 export const NODE_TYPE_MAP: Record<string, NodeTypeConfig> = NODE_CATEGORIES.reduce(
   (acc, category) => {
@@ -176,12 +249,25 @@ export const NODE_TYPE_MAP: Record<string, NodeTypeConfig> = NODE_CATEGORIES.red
 );
 
 /**
- * Get node configuration by type
+ * Get node configuration by type (including custom nodes)
  * @param type - The node type identifier
+ * @param customNodes - Array of custom nodes from store
  * @returns NodeTypeConfig or undefined
  */
-export function getNodeConfig(type: string): NodeTypeConfig | undefined {
-  return NODE_TYPE_MAP[type];
+export function getNodeConfig(
+  type: string,
+  customNodes?: NodeTypeConfig[]
+): NodeTypeConfig | undefined {
+  // First check built-in nodes
+  const builtIn = NODE_TYPE_MAP[type];
+  if (builtIn) return builtIn;
+
+  // Then check custom nodes
+  if (customNodes) {
+    return customNodes.find((node) => node.type === type);
+  }
+
+  return undefined;
 }
 
 /**

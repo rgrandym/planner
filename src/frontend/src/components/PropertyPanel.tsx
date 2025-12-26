@@ -175,6 +175,21 @@ export function PropertyPanel() {
               </div>
             </div>
 
+            {/* Border Width */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">
+                Border Width: {data.borderWidth ?? 2}px
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="8"
+                value={data.borderWidth ?? 2}
+                onChange={(e) => handleUpdate('borderWidth', parseInt(e.target.value))}
+                className="w-full accent-arch-primary"
+              />
+            </div>
+
             {/* Opacity Slider */}
             <div>
               <label className="block text-sm text-gray-300 mb-2">

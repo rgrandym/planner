@@ -1,5 +1,7 @@
 # Project Intelligence & Master Rules
 
+**Active Env:** archflow
+
 **Rule #1:** These instructions are MANDATORY for all tasks including refactoring, feature addition, bug fixing, and scaffolding. Before responding, verify that your proposed code does not violate any constraint below.
 
 ## 🛠 Environment & Dependency Management
@@ -7,7 +9,7 @@
 - **Conda Detection:** Always check for `environment.yml`. Identify the environment name from the `name:` field.
 - **Dependency Sync:** Use dependencies from both `environment.yml` and `requirements.txt`.
 - **Persistence:** When adding a dependency, update **both** files. Ensure the environment remains functional.
-- **Missing Env:** If no environment is found, ask: "Which Conda env should I use?" Update this file with `**Active Env:** [name]` once confirmed.
+- **Missing Env:** If no environment is found, ask: "Which Conda env should I use?" Activate or Create the conda env specified by user. Update this file with `**Active Env:** [name]` once confirmed.
 
 ## 📂 Standard Directory Structure
 

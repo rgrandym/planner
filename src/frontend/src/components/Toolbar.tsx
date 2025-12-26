@@ -1,18 +1,21 @@
+import { NODE_TYPE_MAP } from '@/config/nodes';
 import { useFlowStore } from '@/store/flowStore';
 import { useProjectStore } from '@/store/projectStore';
+import { useThemeStore } from '@/store/themeStore';
 import {
   ChevronDown,
   Copy,
   Download,
-  Edit3,
   FileIcon,
   FilePlus,
   FolderOpen,
   Maximize2,
+  Moon,
   Redo2,
   Save,
   Scissors,
   Settings,
+  Sun,
   Trash2,
   Undo2,
   ZoomIn,
@@ -43,6 +46,7 @@ export function Toolbar() {
     clearCanvas,
     setExportModalOpen,
     setProjectModalOpen,
+    setSettingsModalOpen,
     undoStack,
     redoStack,
     nodes,
@@ -63,6 +67,8 @@ export function Toolbar() {
     saveProject,
     createProject,
   } = useProjectStore();
+
+  const { mode, toggleMode } = useThemeStore();
 
   const { zoomIn, zoomOut, fitView } = useReactFlow();
 
@@ -110,22 +116,195 @@ export function Toolbar() {
   };
 
   /**
-   * Handle save
+   * Handle save - uses File System Access API or fallback download
    */
-  const handleSave = () => {
-    if (activeProjectId) {
-      saveProject(activeProjectId, nodes, edges, viewport);
-      const project = projects.find((p) => p.id === activeProjectId);
-      toast.success(`Saved "${project?.name}"`);
-    } else if (nodes.length > 0) {
-      const name = `Project ${projects.length + 1}`;
-      const id = createProject(name);
-      saveProject(id, nodes, edges, viewport);
-      toast.success(`Saved as "${name}"`);
-    } else {
+  const handleSave = async () => {
+    if (nodes.length === 0) {
       toast.error('Nothing to save');
+      setOpenMenu(null);
+      return;
     }
-    setOpenMenu(null);
+
+    try {
+      // Prepare project data for saving
+      const projectData = {
+        name: activeProjectId 
+          ? projects.find(p => p.id === activeProjectId)?.name || 'Untitled'
+          : `Project ${projects.length + 1}`,
+        nodes: nodes.map(node => {
+          const { icon, ...restData } = node.data;
+          return { ...node, data: restData };
+        }),
+        edges,
+        viewport,
+        savedAt: new Date().toISOString(),
+        version: '1.0',
+      };
+
+      const jsonString = JSON.stringify(projectData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const filename = `${projectData.name.replace(/\s+/g, '_')}.archflow.json`;
+
+      // Check if File System Access API is available and we're in a secure context
+      const supportsFilePicker = 'showSaveFilePicker' in window && 
+        (window.isSecureContext || location.hostname === 'localhost');
+
+      if (supportsFilePicker) {
+        // Close menu AFTER preparing data but BEFORE showing picker
+        // This ensures we still have user gesture context
+        setOpenMenu(null);
+        
+        try {
+          // Use File System Access API for native file picker
+          const fileHandle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{
+              description: 'ArchFlow Project',
+              accept: { 'application/json': ['.json'] },
+            }],
+          });
+          
+          const writable = await fileHandle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          
+          toast.success(`Saved "${projectData.name}"`);
+          
+          // Also save to local storage for quick access
+          if (!activeProjectId) {
+            const id = createProject(projectData.name);
+            saveProject(id, nodes, edges, viewport);
+          } else {
+            saveProject(activeProjectId, nodes, edges, viewport);
+          }
+          return;
+        } catch (err) {
+          // User cancelled - don't fall back to download
+          if ((err as Error).name === 'AbortError') {
+            return;
+          }
+          // Other error - fall back to download
+          console.warn('File System Access API failed, falling back to download:', err);
+        }
+      } else {
+        setOpenMenu(null);
+      }
+
+      // Fallback: use download
+      downloadFile(blob, filename);
+      toast.success('File downloaded');
+      
+      // Save to local storage
+      if (!activeProjectId) {
+        const id = createProject(projectData.name);
+        saveProject(id, nodes, edges, viewport);
+      } else {
+        saveProject(activeProjectId, nodes, edges, viewport);
+      }
+    } catch (error) {
+      toast.error('Failed to save project');
+      console.error('Save error:', error);
+    }
+  };
+
+  /**
+   * Fallback download function
+   */
+  const downloadFile = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  /**
+   * Handle open file - uses File System Access API or file input
+   */
+  const handleOpenFile = async () => {
+    // Check if File System Access API is available
+    const supportsFilePicker = 'showOpenFilePicker' in window && 
+      (window.isSecureContext || location.hostname === 'localhost');
+
+    if (supportsFilePicker) {
+      // Close menu before showing picker to maintain user gesture context
+      setOpenMenu(null);
+      setOpenMenu(null);
+      
+      try {
+        const [fileHandle] = await window.showOpenFilePicker({
+          types: [{
+            description: 'ArchFlow Project',
+            accept: { 'application/json': ['.json'] },
+          }],
+          multiple: false,
+        });
+        const file = await fileHandle.getFile();
+        await loadProjectFromFile(file);
+        return;
+      } catch (err) {
+        // User cancelled
+        if ((err as Error).name === 'AbortError') {
+          return;
+        }
+        console.warn('File System Access API failed, falling back to file input:', err);
+      }
+    } else {
+      setOpenMenu(null);
+    }
+
+    // Fallback: use file input
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.archflow.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        await loadProjectFromFile(file);
+      }
+    };
+    input.click();
+  };
+
+  /**
+   * Load project data from file
+   */
+  const loadProjectFromFile = async (file: File) => {
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      if (!data.nodes || !data.edges) {
+        throw new Error('Invalid project file format');
+      }
+
+      // Hydrate nodes with icons
+      const hydratedNodes = data.nodes.map((node: { data: { nodeType: string } }) => {
+        const nodeConfig = NODE_TYPE_MAP[node.data.nodeType];
+        return {
+          ...node,
+          data: {
+            ...node.data,
+            icon: nodeConfig?.icon || NODE_TYPE_MAP['LLM']?.icon,
+          },
+        };
+      });
+
+      loadCanvas(hydratedNodes, data.edges, data.viewport || { x: 0, y: 0, zoom: 1 });
+      
+      // Create a new project entry
+      const projectName = data.name || file.name.replace('.archflow.json', '').replace('.json', '');
+      const id = createProject(projectName);
+      saveProject(id, hydratedNodes, data.edges, data.viewport || { x: 0, y: 0, zoom: 1 });
+      
+      toast.success(`Opened "${projectName}"`);
+    } catch (error) {
+      toast.error('Failed to parse project file');
+      console.error('Parse error:', error);
+    }
   };
 
   /**
@@ -244,7 +423,13 @@ export function Toolbar() {
           />
           <MenuItem
             icon={FolderOpen}
-            label="Open Project..."
+            label="Open File..."
+            shortcut="⌘O"
+            onClick={handleOpenFile}
+          />
+          <MenuItem
+            icon={FolderOpen}
+            label="Open Recent..."
             shortcut="⌘P"
             onClick={() => {
               setProjectModalOpen(true);
@@ -254,7 +439,7 @@ export function Toolbar() {
           <MenuDivider />
           <MenuItem
             icon={Save}
-            label="Save"
+            label="Save As..."
             shortcut="⌘S"
             onClick={handleSave}
             disabled={nodes.length === 0}
@@ -380,15 +565,7 @@ export function Toolbar() {
             icon={Settings}
             label="Preferences"
             onClick={() => {
-              toast('Settings coming soon', { icon: '⚙️' });
-              setOpenMenu(null);
-            }}
-          />
-          <MenuItem
-            icon={Edit3}
-            label="Customize Theme"
-            onClick={() => {
-              toast('Theme customization coming soon', { icon: '🎨' });
+              setSettingsModalOpen(true);
               setOpenMenu(null);
             }}
           />
@@ -419,6 +596,19 @@ export function Toolbar() {
             onClick={() => fitView({ padding: 0.2 })}
             tooltip="Fit View"
           />
+          <div className="w-px h-4 bg-arch-border mx-1" />
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleMode}
+            className="p-1.5 rounded hover:bg-arch-surface-light transition-colors group"
+            title={mode === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+          >
+            {mode === 'dark' ? (
+              <Sun size={18} className="text-gray-400 group-hover:text-yellow-400 transition-colors" />
+            ) : (
+              <Moon size={18} className="text-gray-400 group-hover:text-blue-400 transition-colors" />
+            )}
+          </button>
         </div>
 
         {/* Status indicators */}

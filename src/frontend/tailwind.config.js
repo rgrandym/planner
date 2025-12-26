@@ -8,13 +8,23 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Dark mode colors (default)
         'arch-bg': '#121212',
         'arch-surface': '#1e1e1e',
         'arch-surface-light': '#2a2a2a',
         'arch-border': '#333333',
+        'arch-text': '#e5e5e5',
+        'arch-text-secondary': '#a3a3a3',
         'arch-primary': '#06b6d4',
         'arch-secondary': '#8b5cf6',
         'arch-accent': '#ec4899',
+        // Light mode colors
+        'arch-bg-light': '#f8f9fa',
+        'arch-surface-light-mode': '#ffffff',
+        'arch-surface-hover-light': '#f1f3f5',
+        'arch-border-light': '#dee2e6',
+        'arch-text-light': '#212529',
+        'arch-text-secondary-light': '#6c757d',
         // Category colors
         'cat-ai': '#8b5cf6',
         'cat-database': '#3b82f6',

@@ -3,6 +3,7 @@ import ReactFlow, {
     Background,
     BackgroundVariant,
     Controls,
+    EdgeTypes,
     MiniMap,
     Node,
     NodeTypes,
@@ -14,9 +15,11 @@ import { CATEGORY_COLORS } from '@/config/nodes';
 import { BaseNode } from '@/nodes';
 import { useFlowStore } from '@/store/flowStore';
 import { useProjectStore } from '@/store/projectStore';
+import { useThemeStore } from '@/store/themeStore';
 import { ArchNodeData, NodeTypeConfig } from '@/types';
 import toast from 'react-hot-toast';
 import { ContextMenu } from './ContextMenu';
+import { CustomEdge } from './CustomEdge';
 import { ExportModal } from './ExportModal';
 import { ProjectModal } from './ProjectModal';
 import { QuickConnectMenu } from './QuickConnectMenu';
@@ -30,15 +33,25 @@ const nodeTypes: NodeTypes = {
 };
 
 /**
+ * Custom edge types mapping
+ */
+const edgeTypes: EdgeTypes = {
+  custom: CustomEdge,
+};
+
+/**
  * Default edge options for new connections
  */
 const defaultEdgeOptions = {
-  type: 'smoothstep',
+  type: 'custom',
   style: {
     stroke: '#06b6d4',
     strokeWidth: 2,
   },
   animated: false,
+  data: {
+    lineStyle: 'solid',
+  },
 };
 
 /**
@@ -73,6 +86,7 @@ export function Canvas() {
     onConnect,
     addNode,
     setSelectedNodeId,
+    setSelectedEdgeId,
     setContextMenu,
     setExportModalOpen,
     setProjectModalOpen,
@@ -84,10 +98,12 @@ export function Canvas() {
     undo,
     redo,
     selectedNodeId,
+    selectedEdgeId,
     copiedNode,
     isDirty,
     loadCanvas,
     viewport,
+    removeEdge,
   } = useFlowStore();
 
   const {
@@ -96,6 +112,15 @@ export function Canvas() {
     saveProject,
     createProject,
   } = useProjectStore();
+
+  const { mode } = useThemeStore();
+  const isDarkMode = mode === 'dark';
+
+  // Theme-adaptive colors
+  const bgColor = isDarkMode ? '#121212' : '#f8f9fa';
+  const dotColor = isDarkMode ? '#333333' : '#d1d5db';
+  const controlsBg = isDarkMode ? 'bg-arch-surface' : 'bg-white';
+  const controlsBorder = isDarkMode ? 'border-arch-border' : 'border-gray-200';
 
   /**
    * Handle initialization of React Flow instance
@@ -218,8 +243,20 @@ export function Canvas() {
    */
   const onPaneClick = useCallback(() => {
     setSelectedNodeId(null);
+    setSelectedEdgeId(null);
     setContextMenu(null);
-  }, [setSelectedNodeId, setContextMenu]);
+  }, [setSelectedNodeId, setSelectedEdgeId, setContextMenu]);
+
+  /**
+   * Handle edge click to select
+   */
+  const onEdgeClick = useCallback(
+    (_: React.MouseEvent, edge: { id: string }) => {
+      setSelectedEdgeId(edge.id);
+      setSelectedNodeId(null);
+    },
+    [setSelectedEdgeId, setSelectedNodeId]
+  );
 
   /**
    * Handle viewport changes for persistence
@@ -322,7 +359,7 @@ export function Canvas() {
       }
 
       // Delete: Backspace or Delete
-      if ((event.key === 'Backspace' || event.key === 'Delete') && selectedNodeId) {
+      if ((event.key === 'Backspace' || event.key === 'Delete') && (selectedNodeId || selectedEdgeId)) {
         // Don't delete if focus is on an input
         if (
           document.activeElement?.tagName === 'INPUT' ||
@@ -331,7 +368,12 @@ export function Canvas() {
           return;
         }
         event.preventDefault();
-        deleteNode(selectedNodeId);
+        if (selectedNodeId) {
+          deleteNode(selectedNodeId);
+        } else if (selectedEdgeId) {
+          removeEdge(selectedEdgeId);
+          setSelectedEdgeId(null);
+        }
         return;
       }
     };
@@ -340,15 +382,18 @@ export function Canvas() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     selectedNodeId,
+    selectedEdgeId,
     copiedNode,
     setExportModalOpen,
     setProjectModalOpen,
+    setSelectedEdgeId,
     undo,
     redo,
     copyNode,
     pasteNode,
     duplicateNode,
     deleteNode,
+    removeEdge,
     nodes,
     edges,
     viewport,
@@ -361,7 +406,11 @@ export function Canvas() {
   ]);
 
   return (
-    <div ref={reactFlowWrapper} className="flex-1 h-full relative pt-10">
+    <div 
+      ref={reactFlowWrapper} 
+      className="flex-1 h-full relative pt-10"
+      style={{ backgroundColor: bgColor }}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -373,12 +422,13 @@ export function Canvas() {
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}
         onNodeContextMenu={onNodeContextMenu}
+        onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
         onMoveEnd={onMoveEnd}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         defaultEdgeOptions={defaultEdgeOptions}
-        snapToGrid
-        snapGrid={[16, 16]}
+        snapToGrid={false}
         fitView
         minZoom={0.1}
         maxZoom={2}
@@ -392,10 +442,10 @@ export function Canvas() {
           variant={BackgroundVariant.Dots}
           gap={16}
           size={1}
-          color="#333333"
+          color={dotColor}
         />
         <Controls
-          className="!bg-arch-surface !border-arch-border !rounded-lg !shadow-lg"
+          className={`!${controlsBg} !${controlsBorder} !rounded-lg !shadow-lg`}
           showInteractive={false}
         />
         <MiniMap

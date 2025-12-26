@@ -1,7 +1,8 @@
 import { NODE_CATEGORIES } from '@/config/nodes';
+import { useCustomNodesStore } from '@/store/customNodesStore';
 import { NodeCategory, NodeTypeConfig } from '@/types';
 import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
-import { DragEvent, useState } from 'react';
+import { DragEvent, useMemo, useState } from 'react';
 
 /**
  * Sidebar component with draggable node palette
@@ -10,10 +11,30 @@ import { DragEvent, useState } from 'react';
  * - Draggable nodes with visual feedback
  * - Category color coding
  * - Hover effects
+ * - Custom user-created nodes
  */
 export function Sidebar() {
+  const { customNodes } = useCustomNodesStore();
+  
+  // Combine built-in categories with custom nodes category
+  const allCategories = useMemo(() => {
+    const categories = [...NODE_CATEGORIES];
+    
+    // Add custom nodes category if there are any custom nodes
+    if (customNodes.length > 0) {
+      categories.push({
+        id: 'custom' as NodeCategory,
+        label: 'Custom Nodes',
+        color: '#a855f7',
+        nodes: customNodes,
+      });
+    }
+    
+    return categories;
+  }, [customNodes]);
+
   const [expandedCategories, setExpandedCategories] = useState<Set<NodeCategory>>(
-    new Set(NODE_CATEGORIES.map((c) => c.id))
+    new Set(allCategories.map((c) => c.id))
   );
 
   /**
@@ -54,7 +75,7 @@ export function Sidebar() {
 
       {/* Node Categories */}
       <div className="flex-1 overflow-y-auto p-2">
-        {NODE_CATEGORIES.map((category) => (
+        {allCategories.map((category) => (
           <div key={category.id} className="mb-2">
             {/* Category Header */}
             <button
