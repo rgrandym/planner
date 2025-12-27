@@ -49,3 +49,7 @@ coverage/
 # Misc
 *.local
 .cache/
+
+# Generated diagrams
+*.png
+*.pdf

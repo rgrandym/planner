@@ -43,6 +43,7 @@ interface GlobalSettings {
   
   // Icon/Node Settings
   defaultIconSize: number;
+  defaultIconSizeMode: 'ratio' | 'fixed' | 'free';
   iconSizeRange: { min: number; max: number };
   defaultNodeOpacity: number;
   defaultBorderWidth: number;
@@ -84,6 +85,7 @@ interface GlobalSettingsStore extends GlobalSettings {
   
   // Icon Actions
   setDefaultIconSize: (size: number) => void;
+  setDefaultIconSizeMode: (mode: 'ratio' | 'fixed' | 'free') => void;
   setIconSizeRange: (range: { min: number; max: number }) => void;
   setDefaultNodeOpacity: (opacity: number) => void;
   setDefaultBorderWidth: (width: number) => void;
@@ -127,6 +129,7 @@ export const DEFAULT_SETTINGS: GlobalSettings = {
   
   // Icon/Node Settings
   defaultIconSize: 20,
+  defaultIconSizeMode: 'ratio',
   iconSizeRange: { min: 8, max: 64 },
   defaultNodeOpacity: 90,
   defaultBorderWidth: 2,
@@ -181,6 +184,7 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
 
       // Icon Actions
       setDefaultIconSize: (size) => set({ defaultIconSize: size }),
+      setDefaultIconSizeMode: (mode) => set({ defaultIconSizeMode: mode }),
       setIconSizeRange: (range) => set({ iconSizeRange: range }),
       setDefaultNodeOpacity: (opacity) => set({ defaultNodeOpacity: opacity }),
       setDefaultBorderWidth: (width) => set({ defaultBorderWidth: width }),

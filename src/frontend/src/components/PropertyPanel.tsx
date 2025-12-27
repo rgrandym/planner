@@ -71,7 +71,10 @@ export function PropertyPanel() {
               {isPropertyPanelPinned ? <Pin size={16} /> : <PinOff size={16} />}
             </button>
             <button
-              onClick={toggleRightPanel}
+              onClick={() => {
+                toggleRightPanel();
+                setSelectedNodeId(null);
+              }}
               className="p-1.5 hover:bg-arch-surface-light rounded transition-colors"
               title="Hide panel"
             >
@@ -136,9 +139,12 @@ export function PropertyPanel() {
             {isPropertyPanelPinned ? <Pin size={14} /> : <PinOff size={14} />}
           </button>
           <button
-            onClick={() => setSelectedNodeId(null)}
+            onClick={() => {
+              setSelectedNodeId(null);
+              useUIStore.getState().setRightPanelVisible(false);
+            }}
             className="p-1 hover:bg-arch-surface-light rounded transition-colors"
-            title="Deselect node"
+            title="Close panel"
           >
             <X size={18} className="text-gray-400" />
           </button>
@@ -155,13 +161,13 @@ export function PropertyPanel() {
           <div className="space-y-3">
             <div>
               <label className="block text-sm text-gray-300 mb-1">Name</label>
-              <input
-                type="text"
+              <textarea
                 value={data.label}
                 onChange={(e) => handleUpdate('label', e.target.value)}
+                rows={2}
                 className="w-full px-3 py-2 bg-arch-bg border border-arch-border rounded-lg
                            text-white text-sm focus:border-arch-primary focus:ring-1 
-                           focus:ring-arch-primary outline-none transition-colors"
+                           focus:ring-arch-primary outline-none transition-colors resize-y"
               />
             </div>
             <div>
@@ -188,12 +194,25 @@ export function PropertyPanel() {
             <button
               onClick={() => {
                 const currentLines = data.labelLines || [];
-                const newLine: LabelLine = { 
+                // If this is the first line being added, we should preserve the current primary label
+                // as the first line, and then add the new line below it.
+                let newLines = [...currentLines];
+                
+                if (currentLines.length === 0 && data.label) {
+                  newLines.push({
+                    text: data.label,
+                    fontSize: data.fontSize ?? globalSettings.defaultFontSize,
+                    fontWeight: 'normal'
+                  });
+                }
+
+                newLines.push({ 
                   text: 'New line', 
                   fontSize: data.fontSize ?? globalSettings.defaultFontSize,
                   fontWeight: 'normal'
-                };
-                handleUpdate('labelLines', [...currentLines, newLine]);
+                });
+                
+                handleUpdate('labelLines', newLines);
               }}
               className="flex items-center gap-1 px-2 py-1 text-xs rounded
                          bg-arch-primary/20 text-arch-primary hover:bg-arch-primary/30 transition-colors"
@@ -297,6 +316,44 @@ export function PropertyPanel() {
               showCustomInput
             />
 
+            {/* Node Dimensions */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Width (px)</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="1000"
+                  value={data.width || ''}
+                  placeholder="Auto"
+                  onChange={(e) => {
+                    const val = e.target.value ? parseInt(e.target.value) : undefined;
+                    handleUpdate('width', val);
+                  }}
+                  className="w-full px-3 py-2 bg-arch-bg border border-arch-border rounded-lg
+                             text-white text-sm focus:border-arch-primary focus:ring-1 
+                             focus:ring-arch-primary outline-none transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-300 mb-2">Height (px)</label>
+                <input
+                  type="number"
+                  min="50"
+                  max="1000"
+                  value={data.height || ''}
+                  placeholder="Auto"
+                  onChange={(e) => {
+                    const val = e.target.value ? parseInt(e.target.value) : undefined;
+                    handleUpdate('height', val);
+                  }}
+                  className="w-full px-3 py-2 bg-arch-bg border border-arch-border rounded-lg
+                             text-white text-sm focus:border-arch-primary focus:ring-1 
+                             focus:ring-arch-primary outline-none transition-colors"
+                />
+              </div>
+            </div>
+
             {/* Border Width */}
             <div>
               <label className="block text-sm text-gray-300 mb-2">
@@ -342,19 +399,64 @@ export function PropertyPanel() {
               />
             </div>
 
-            {/* Icon Size */}
+            {/* Icon Size Mode */}
             <div>
-              <label className="block text-sm text-gray-300 mb-2">
-                Icon Size: {data.iconSize ?? globalSettings.defaultIconSize}px
+              <label className="block text-sm text-gray-300 mb-2">Icon Sizing</label>
+              <div className="grid grid-cols-3 gap-2 mb-2">
+                {(['ratio', 'fixed', 'free'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => handleUpdate('iconSizeMode', mode)}
+                    className={`
+                      px-2 py-1.5 rounded border transition-all text-xs font-medium capitalize
+                      ${(data.iconSizeMode || 'ratio') === mode
+                        ? 'border-arch-primary bg-arch-primary/10 text-arch-primary'
+                        : 'border-arch-border bg-arch-bg text-gray-400 hover:border-gray-600'
+                      }
+                    `}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Icon Size Slider - Context aware */}
+              <label className="block text-xs text-gray-500 mb-1">
+                {(data.iconSizeMode === 'fixed' || data.iconSizeMode === 'free') 
+                  ? `Size: ${data.iconSize ?? globalSettings.defaultIconSize}px`
+                  : `Ratio: ${(data.iconSize ?? 50) / 100}x`
+                }
               </label>
               <input
                 type="range"
-                min={globalSettings.iconSizeRange.min}
-                max={globalSettings.iconSizeRange.max}
-                value={data.iconSize ?? globalSettings.defaultIconSize}
+                min={(data.iconSizeMode === 'fixed' || data.iconSizeMode === 'free') ? 10 : 10}
+                max={(data.iconSizeMode === 'fixed' || data.iconSizeMode === 'free') ? 100 : 90}
+                value={data.iconSize ?? ((data.iconSizeMode === 'fixed' || data.iconSizeMode === 'free') ? globalSettings.defaultIconSize : 50)}
                 onChange={(e) => handleUpdate('iconSize', parseInt(e.target.value))}
                 className="w-full accent-arch-primary"
               />
+            </div>
+
+            {/* Node Shape */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">Shape</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['rectangle', 'rounded', 'circle', 'diamond', 'hexagon', 'triangle'] as const).map((shape) => (
+                  <button
+                    key={shape}
+                    onClick={() => handleUpdate('shape', shape)}
+                    className={`
+                      px-2 py-2 rounded-lg border transition-all text-xs font-medium capitalize
+                      ${(data.shape || 'rectangle') === shape
+                        ? 'border-arch-primary bg-arch-primary/10 text-arch-primary'
+                        : 'border-arch-border bg-arch-bg text-gray-400 hover:border-gray-600'
+                      }
+                    `}
+                  >
+                    {shape}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </section>

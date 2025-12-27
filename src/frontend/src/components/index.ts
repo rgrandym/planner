@@ -1,7 +1,10 @@
 export { Canvas } from './Canvas';
 export { ColorPicker, ColorSwatches } from './ColorPicker';
+export { DestinationMarker, OriginMarker } from './ConnectionPointMarkers';
+export { ConnectionPointsOverlay } from './ConnectionPointsOverlay';
 export { ContextMenu } from './ContextMenu';
 export { CustomEdge } from './CustomEdge';
+export { EdgeMarkerDefs } from './EdgeMarkerDefs';
 export { EdgePropertyPanel } from './EdgePropertyPanel';
 export { ErrorBoundary } from './ErrorBoundary';
 export { ExportModal } from './ExportModal';
@@ -12,4 +15,3 @@ export { QuickConnectMenu } from './QuickConnectMenu';
 export { SettingsModal } from './SettingsModal';
 export { Sidebar } from './Sidebar';
 export { Toolbar } from './Toolbar';
-

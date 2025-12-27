@@ -26,7 +26,14 @@ const SIZE_PRESETS: Record<ImageSize, { width: number; height: number } | null> 
  * Modal dialog for exporting diagrams as Mermaid, Python code, or images.
  */
 export function ExportModal() {
-  const { isExportModalOpen, setExportModalOpen, nodes, edges } = useFlowStore();
+  const { 
+    isExportModalOpen, 
+    setExportModalOpen, 
+    nodes, 
+    edges,
+    setSelectedNodeId,
+    setSelectedEdgeId
+  } = useFlowStore();
   const { mode } = useThemeStore();
   const [activeTab, setActiveTab] = useState<ExportTab>('python');
   const [copied, setCopied] = useState(false);
@@ -121,6 +128,17 @@ export function ExportModal() {
     setIsExporting(true);
     setExportProgress('Preparing export...');
     
+    // Deselect everything to avoid capturing selection handles
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    
+    // Wait for render to clear selection visuals
+    await new Promise(resolve => setTimeout(resolve, 100));
+    
+    let markersClone: Node | null = null;
+    let overlayClone: Node | null = null;
+    const viewport = document.querySelector('.react-flow__viewport') as HTMLElement;
+
     try {
       const flowNodes = getNodes();
       if (flowNodes.length === 0) {
@@ -132,12 +150,35 @@ export function ExportModal() {
 
       setExportProgress('Calculating diagram bounds...');
       
-      const viewport = document.querySelector('.react-flow__viewport') as HTMLElement;
       if (!viewport) {
         toast.error('Could not find canvas');
         setIsExporting(false);
         setExportProgress('');
         return;
+      }
+
+      // Temporarily inject markers into viewport for capture
+      const markers = document.querySelector('.react-flow__edge-marker-defs');
+      if (markers) {
+        markersClone = markers.cloneNode(true);
+        viewport.appendChild(markersClone);
+      }
+
+      // Temporarily inject connection points overlay into viewport for capture
+      const overlay = document.querySelector('.react-flow__connection-points-overlay');
+      if (overlay) {
+        overlayClone = overlay.cloneNode(true);
+        // Reset transform on the group inside overlay because viewport already handles transform
+        const group = (overlayClone as Element).querySelector('g');
+        if (group) {
+          group.setAttribute('transform', '');
+        }
+        // Ensure the overlay is visible and has pointer events (though pointer events don't matter for image)
+        (overlayClone as HTMLElement).style.display = 'block';
+        (overlayClone as HTMLElement).style.visibility = 'visible';
+        (overlayClone as HTMLElement).style.opacity = '1';
+        
+        viewport.appendChild(overlayClone);
       }
 
       // Calculate tight bounds around nodes only
@@ -200,7 +241,16 @@ export function ExportModal() {
           width: `${exportWidth}px`,
           height: `${exportHeight}px`,
           transform: `translate(${offsetX}px, ${offsetY}px) scale(${scale})`,
-          transformOrigin: 'top left',
+          // Connection points overlay is now injected into viewport, so we don't filter it out
+          // But we should filter out the ORIGINAL overlay if it somehow gets captured (it shouldn't as it's outside viewport)
+          // However, if we were capturing the parent, we would need to be careful.
+          // Since we capture viewport, we only see what's inside.
+          // The injected clone doesn't have the class 'react-flow__connection-points-overlay' on the node itself?
+          // Yes it does, because we cloned the SVG which has the class.
+          // So we must NOT filter it out if it's the clone.
+          // But wait, the filter runs on the node being traversed.
+          // If we filter out 'react-flow__connection-points-overlay', we filter out our clone too!
+          // So we must REMOVE this filter.
         },
         quality: 1,
         pixelRatio: resolution,
@@ -213,6 +263,7 @@ export function ExportModal() {
           if (node.classList?.contains('react-flow__controls')) return false;
           if (node.classList?.contains('react-flow__minimap')) return false;
           if (node.classList?.contains('react-flow__attribution')) return false;
+          if (node.classList?.contains('react-flow__connection-points-overlay')) return false;
           return true;
         },
       };
@@ -271,6 +322,13 @@ export function ExportModal() {
       console.error('Export error:', error);
       toast.error('Failed to export image');
     } finally {
+      // Cleanup markers and overlay
+      if (markersClone && viewport && viewport.contains(markersClone)) {
+        viewport.removeChild(markersClone);
+      }
+      if (overlayClone && viewport && viewport.contains(overlayClone)) {
+        viewport.removeChild(overlayClone);
+      }
       setIsExporting(false);
       setExportProgress('');
     }

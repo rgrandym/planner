@@ -16,6 +16,11 @@ interface SerializableCustomNode {
   description?: string;
   shape?: string;
   isCustom: boolean;
+  // New properties for persistence
+  width?: number;
+  height?: number;
+  iconSizeMode?: 'ratio' | 'fixed' | 'free';
+  iconSize?: number;
 }
 
 /**
@@ -52,6 +57,15 @@ function hydrateNodes(serializedNodes: SerializableCustomNode[]): NodeTypeConfig
     description: node.description,
     shape: node.shape as NodeTypeConfig['shape'],
     isCustom: true,
+    // Hydrate new properties
+    // We cast to any because NodeTypeConfig might not have these fields yet in strict typing
+    // but they will be passed to the node data
+    ...({
+      width: node.width,
+      height: node.height,
+      iconSizeMode: node.iconSizeMode,
+      iconSize: node.iconSize,
+    } as any),
   }));
 }
 
@@ -77,6 +91,13 @@ export const useCustomNodesStore = create<CustomNodesStore>()(
           description: node.description,
           shape: node.shape,
           isCustom: true,
+          // Persist new properties if they exist on the input node
+          // Note: NodeTypeConfig needs to be updated to include these optional fields
+          // or we cast to any for now if they come from ArchNodeData
+          width: (node as any).width,
+          height: (node as any).height,
+          iconSizeMode: (node as any).iconSizeMode,
+          iconSize: (node as any).iconSize,
         };
 
         set((state) => {
@@ -102,6 +123,11 @@ export const useCustomNodesStore = create<CustomNodesStore>()(
                 color: updates.color ?? node.color,
                 description: updates.description ?? node.description,
                 shape: updates.shape ?? node.shape,
+                // Update new properties
+                width: (updates as any).width ?? node.width,
+                height: (updates as any).height ?? node.height,
+                iconSizeMode: (updates as any).iconSizeMode ?? node.iconSizeMode,
+                iconSize: (updates as any).iconSize ?? node.iconSize,
               };
             }
             return node;

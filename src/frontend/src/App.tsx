@@ -28,6 +28,7 @@ function App() {
   } = useUIStore();
 
   // Determine if right panel should show
+  // Always show if an edge is selected, regardless of pin state
   const showRightPanel = isRightPanelVisible && (
     selectedEdgeId || 
     selectedNodeId || 
@@ -37,7 +38,7 @@ function App() {
   return (
     <ErrorBoundary>
       <ReactFlowProvider>
-        <div className={`h-screen w-screen flex overflow-hidden ${
+        <div className={`h-full w-full flex overflow-hidden fixed inset-0 ${
           mode === 'dark' 
             ? 'dark bg-arch-bg text-white' 
             : 'light bg-arch-bg-light text-arch-text-light'
@@ -105,7 +106,9 @@ function App() {
 
           {/* Right Sidebar - Property Panel or Edge Panel */}
           {showRightPanel && !isFullViewMode && (
-            selectedEdgeId ? <EdgePropertyPanel /> : <PropertyPanel />
+            <div className="absolute right-0 top-0 h-full z-50 shadow-xl">
+              {selectedEdgeId ? <EdgePropertyPanel /> : <PropertyPanel />}
+            </div>
           )}
 
           {/* Settings Modal */}

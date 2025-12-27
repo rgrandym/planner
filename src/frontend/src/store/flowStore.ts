@@ -1,7 +1,6 @@
 import { NODE_TYPE_MAP } from '@/config/nodes';
 import { ArchNodeData, ContextMenuState } from '@/types';
 import {
-    addEdge,
     applyEdgeChanges,
     applyNodeChanges,
     Connection,
@@ -10,7 +9,7 @@ import {
     OnConnect,
     OnEdgesChange,
     OnNodesChange,
-    Viewport,
+    Viewport
 } from 'reactflow';
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
@@ -170,61 +169,37 @@ export const useFlowStore = create<FlowStore>()(
 
     /**
      * Handle new connections between nodes
-     * Uses distributed handle positions for multiple connections
+     * Allows multiple edges on the same side with auto-spacing
      */
     onConnect: (connection: Connection) => {
       get().saveToUndoStack();
       
-      // Get existing edges to determine handle distribution
-      const existingEdges = get().edges;
-      const sourceId = connection.source;
-      const targetId = connection.target;
+      // Use the provided handles, or default to right-source and left-target
+      const sourceHandle = connection.sourceHandle || 'right-source';
+      const targetHandle = connection.targetHandle || 'left-target';
       
-      // Count existing connections from this source to any target
-      const outgoingFromSource = existingEdges.filter(e => e.source === sourceId);
-      
-      // Determine which source handle to use based on existing connections
-      const sourceHandles = ['right-source', 'bottom-source', 'top-source', 'left-source'];
-      const usedSourceHandles = new Set(outgoingFromSource.map(e => e.sourceHandle));
-      
-      // Find an unused handle or cycle through
-      let sourceHandle = connection.sourceHandle;
-      if (!sourceHandle) {
-        sourceHandle = sourceHandles.find(h => !usedSourceHandles.has(h)) || 
-          sourceHandles[outgoingFromSource.length % sourceHandles.length];
-      }
-      
-      // Count existing connections to this target
-      const incomingToTarget = existingEdges.filter(e => e.target === targetId);
-      const targetHandles = ['left-target', 'top-target', 'bottom-target', 'right-target'];
-      const usedTargetHandles = new Set(incomingToTarget.map(e => e.targetHandle));
-      
-      let targetHandle = connection.targetHandle;
-      if (!targetHandle) {
-        targetHandle = targetHandles.find(h => !usedTargetHandles.has(h)) ||
-          targetHandles[incomingToTarget.length % targetHandles.length];
-      }
-      
-      set({
-        edges: addEdge(
-          {
-            ...connection,
-            sourceHandle,
-            targetHandle,
-            type: 'custom',
-            animated: false,
-            style: {
-              stroke: '#06b6d4',
-              strokeWidth: 2,
-            },
-            data: {
-              lineStyle: 'solid',
-            },
-          },
-          get().edges
-        ),
+      // Create a new edge with a unique ID to allow multiple edges between same handles
+      const newEdge: Edge = {
+        id: `edge-${connection.source}-${connection.target}-${Date.now()}`,
+        source: connection.source!,
+        target: connection.target!,
+        sourceHandle,
+        targetHandle,
+        type: 'custom',
+        animated: false,
+        style: {
+          stroke: '#06b6d4',
+          strokeWidth: 2,
+        },
+        data: {
+          lineStyle: 'solid',
+        },
+      };
+
+      set((state) => ({
+        edges: [...state.edges, newEdge],
         isDirty: true,
-      });
+      }));
     },
 
     /**

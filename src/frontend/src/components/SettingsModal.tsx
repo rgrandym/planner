@@ -19,7 +19,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'general' | 'ui' | 'presets' | 'fonts' | 'lines' | 'colors' | 'files' | 'custom-nodes';
+type SettingsTab = 'general' | 'ui' | 'presets' | 'fonts' | 'lines' | 'colors' | 'icons' | 'files' | 'custom-nodes';
 
 /**
  * Line style options
@@ -101,13 +101,13 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       />
 
       {/* Modal */}
-      <div className="relative w-full max-w-3xl max-h-[85vh] bg-arch-surface 
+      <div className="relative w-full max-w-3xl h-[85vh] bg-arch-surface 
                       rounded-xl shadow-2xl border border-arch-border flex flex-col
                       dark:bg-arch-surface dark:border-arch-border
                       light:bg-arch-surface-light-mode light:border-arch-border-light">
-        {/* Header */}
+        {/* Header - Fixed Height */}
         <div className="flex items-center justify-between p-6 border-b border-arch-border
-                        dark:border-arch-border light:border-arch-border-light">
+                        dark:border-arch-border light:border-arch-border-light shrink-0 h-20">
           <h2 className="text-2xl font-bold text-white dark:text-white light:text-arch-text-light">
             Settings
           </h2>
@@ -120,8 +120,8 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-arch-border px-6 dark:border-arch-border light:border-arch-border-light overflow-x-auto">
+        {/* Tabs - Fixed Height */}
+        <div className="flex border-b border-arch-border px-6 dark:border-arch-border light:border-arch-border-light overflow-x-auto shrink-0 h-14">
           <button
             onClick={() => setActiveTab('general')}
             className={`
@@ -205,6 +205,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           >
             <Palette size={16} />
             Colors
+          </button>
+          <button
+            onClick={() => setActiveTab('icons')}
+            className={`
+              px-4 py-3 border-b-2 transition-colors font-medium text-sm whitespace-nowrap flex items-center gap-2
+              ${
+                activeTab === 'icons'
+                  ? 'border-arch-primary text-arch-primary'
+                  : 'border-transparent text-gray-400 hover:text-gray-300 dark:text-gray-400 dark:hover:text-gray-300 light:text-arch-text-secondary-light'
+              }
+            `}
+          >
+            <Layout size={16} />
+            Icons
           </button>
           <button
             onClick={() => setActiveTab('files')}
@@ -934,6 +948,92 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                   >
                     <CheckCircle2 size={16} />
                     Apply Color Settings to All Existing Nodes ({nodes.length})
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Icons Tab */}
+          {activeTab === 'icons' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-3">Icon & Node Size Settings</h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Configure default size and scaling behavior for nodes and icons
+                </p>
+              </div>
+
+              <div className="p-4 bg-arch-bg rounded-lg border border-arch-border space-y-5">
+                {/* Icon Size Mode */}
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2">Default Icon Sizing Mode</label>
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {(['ratio', 'fixed', 'free'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => globalSettings.setDefaultIconSizeMode(mode)}
+                        className={`
+                          px-3 py-2 rounded-lg border transition-all text-sm font-medium capitalize
+                          ${globalSettings.defaultIconSizeMode === mode
+                            ? 'border-arch-primary bg-arch-primary/10 text-arch-primary'
+                            : 'border-arch-border bg-arch-surface text-gray-400 hover:border-gray-600'
+                          }
+                        `}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {globalSettings.defaultIconSizeMode === 'ratio' && "Icon size scales relative to node dimensions (percentage)"}
+                    {globalSettings.defaultIconSizeMode === 'fixed' && "Icon size remains constant regardless of node size (pixels)"}
+                    {globalSettings.defaultIconSizeMode === 'free' && "Icon size can be adjusted independently (pixels)"}
+                  </p>
+                </div>
+
+                {/* Default Icon Size */}
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2">
+                    {globalSettings.defaultIconSizeMode === 'ratio' 
+                      ? `Default Icon Ratio: ${globalSettings.defaultIconSize}%` 
+                      : `Default Icon Size: ${globalSettings.defaultIconSize}px`
+                    }
+                  </label>
+                  <input
+                    type="range"
+                    min={globalSettings.defaultIconSizeMode === 'ratio' ? 10 : globalSettings.iconSizeRange.min}
+                    max={globalSettings.defaultIconSizeMode === 'ratio' ? 90 : globalSettings.iconSizeRange.max}
+                    value={globalSettings.defaultIconSize}
+                    onChange={(e) => globalSettings.setDefaultIconSize(parseInt(e.target.value))}
+                    className="w-full accent-arch-primary"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>{globalSettings.defaultIconSizeMode === 'ratio' ? '10%' : `${globalSettings.iconSizeRange.min}px`}</span>
+                    <span>{globalSettings.defaultIconSizeMode === 'ratio' ? '90%' : `${globalSettings.iconSizeRange.max}px`}</span>
+                  </div>
+                </div>
+
+                {/* Apply to All Nodes Button */}
+                <div className="pt-4 border-t border-arch-border">
+                  <button
+                    onClick={() => {
+                      if (nodes.length === 0) {
+                        toast.error('No nodes to update');
+                        return;
+                      }
+                      applyNodeSettingsToAllNodes({
+                        iconSize: globalSettings.defaultIconSize,
+                        iconSizeMode: globalSettings.defaultIconSizeMode,
+                      });
+                      toast.success(`Applied icon settings to all ${nodes.length} nodes`);
+                    }}
+                    disabled={nodes.length === 0}
+                    className="flex items-center gap-2 px-4 py-2 bg-arch-primary/10 hover:bg-arch-primary/20
+                               text-arch-primary rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <CheckCircle2 size={16} />
+                    Apply Icon Settings to All Existing Nodes ({nodes.length})
                   </button>
                 </div>
               </div>

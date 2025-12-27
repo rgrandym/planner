@@ -9,6 +9,7 @@ import { Handle, NodeProps, NodeResizer, Position, useReactFlow, useStore } from
 
 /**
  * Get shape-specific styling for the node container
+ * Uses CSS for proper shape rendering
  */
 function getShapeStyles(shape: NodeShape = 'rectangle', color: string, selected: boolean) {
   const baseStyles = {
@@ -31,17 +32,44 @@ function getShapeStyles(shape: NodeShape = 'rectangle', color: string, selected:
     case 'diamond':
       return {
         ...baseStyles,
-        borderRadius: '0.5rem',
-        transform: `${selected ? 'scale(1.02)' : 'scale(1)'} rotate(45deg)`,
+        borderRadius: '4px',
+        // Remove rotation from container, apply it to a background element instead
+        // or use clip-path for better content handling
+        clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)',
         minWidth: '100px',
         minHeight: '100px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
       };
     case 'hexagon':
       return {
         ...baseStyles,
+        borderRadius: '0',
         clipPath: 'polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%)',
+        minWidth: '140px',
+        minHeight: '80px',
+        padding: '1rem 2.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // Ensure background color is applied correctly with clip-path
+        backgroundColor: color,
+      };
+    case 'triangle':
+      return {
+        ...baseStyles,
+        borderRadius: '0',
+        clipPath: 'polygon(50% 0%, 100% 100%, 0% 100%)',
         minWidth: '120px',
-        padding: '1.5rem 2rem',
+        minHeight: '100px',
+        padding: '2.5rem 1.5rem 1rem 1.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        // Ensure background color is applied correctly with clip-path
+        backgroundColor: color,
       };
     case 'rounded':
       return {
@@ -83,12 +111,23 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
   
   const opacity = data.opacity ?? 90;
   const fontSize = data.fontSize ?? 14;
-  const iconSize = data.iconSize ?? 20;
   const borderColor = data.borderColor ?? data.color;
   const borderWidth = data.borderWidth ?? 2;
   const shape = data.shape || 'rectangle';
   const nodeWidth = data.width;
   const nodeHeight = data.height;
+  const iconSizeMode = data.iconSizeMode || 'ratio';
+  
+  // Calculate icon size based on mode
+  let iconSize = data.iconSize ?? 20;
+  if (iconSizeMode === 'ratio') {
+    // If ratio mode, iconSize is a percentage (10-90) of the smallest dimension
+    // Default to 50% if not set or if using old pixel value
+    const ratio = (data.iconSize && data.iconSize <= 100) ? data.iconSize / 100 : 0.5;
+    const minDim = Math.min(nodeWidth || 150, nodeHeight || (shape === 'circle' || shape === 'diamond' ? 100 : 60));
+    iconSize = minDim * ratio;
+  }
+
   const [showConnectButtons, setShowConnectButtons] = useState(false);
   
   const { getEdges } = useReactFlow();
@@ -106,10 +145,21 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
   const showHandles = showConnectButtons || selected || isConnecting;
 
   // Get shape-specific styles
-  const shapeStyles = getShapeStyles(shape, data.color, selected || false);
-
-  // For diamond shape, we need to rotate content back
-  const contentRotation = shape === 'diamond' ? 'rotate(-45deg)' : 'rotate(0deg)';
+  // We now handle shapes via SVG backgrounds for better control
+  const shapeStyles = {
+    transform: selected ? 'scale(1.02)' : 'scale(1)',
+    minWidth: shape === 'circle' || shape === 'diamond' ? '80px' : '140px',
+    minHeight: shape === 'circle' || shape === 'diamond' ? '80px' : '60px',
+    width: nodeWidth ? `${nodeWidth}px` : undefined,
+    height: nodeHeight ? `${nodeHeight}px` : undefined,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative' as const,
+    // Ensure content is centered for all shapes
+    // For triangle, we might need to offset the content slightly upwards visually
+    paddingTop: shape === 'triangle' ? '15%' : '0',
+  };
 
   // Theme-adaptive background color
   const bgColor = isDarkMode 
@@ -119,6 +169,74 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
   // Theme-adaptive text color
   const textColor = isDarkMode ? '#ffffff' : '#1f2937';
   const secondaryTextColor = isDarkMode ? '#9ca3af' : '#6b7280';
+
+  // Render shape background
+  const renderShapeBackground = () => {
+    const commonProps = {
+      fill: bgColor,
+      stroke: borderColor,
+      strokeWidth: borderWidth,
+      className: "transition-all duration-200",
+    };
+
+    // For SVG shapes, we need to know dimensions. 
+    // Since we can't easily get real-time DOM dims in React Flow without ResizeObserver,
+    // we'll use 100% width/height and vector-effect="non-scaling-stroke" or preserveAspectRatio
+    
+    switch (shape) {
+      case 'circle':
+        return (
+          <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ zIndex: -1 }}>
+            <circle cx="50%" cy="50%" r="48%" {...commonProps} />
+          </svg>
+        );
+      case 'diamond':
+        return (
+          <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ zIndex: -1 }}>
+            <polygon points="50,0 100,50 50,100 0,50" vectorEffect="non-scaling-stroke" preserveAspectRatio="none" {...commonProps} />
+          </svg>
+        );
+      case 'hexagon':
+        return (
+          <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ zIndex: -1 }}>
+            <polygon points="25,0 75,0 100,50 75,100 25,100 0,50" vectorEffect="non-scaling-stroke" preserveAspectRatio="none" {...commonProps} />
+          </svg>
+        );
+      case 'triangle':
+        return (
+          <svg className="absolute inset-0 w-full h-full overflow-visible" style={{ zIndex: -1 }}>
+            <polygon points="50,0 100,100 0,100" vectorEffect="non-scaling-stroke" preserveAspectRatio="none" {...commonProps} />
+          </svg>
+        );
+      case 'rounded':
+        return (
+          <div 
+            className="absolute inset-0 transition-all duration-200"
+            style={{ 
+              backgroundColor: bgColor,
+              border: `${borderWidth}px solid ${borderColor}`,
+              borderRadius: '2rem',
+              zIndex: -1,
+              boxShadow: selected ? `0 0 20px ${data.color}40` : `0 4px 6px rgba(0, 0, 0, 0.15)`,
+            }} 
+          />
+        );
+      case 'rectangle':
+      default:
+        return (
+          <div 
+            className="absolute inset-0 transition-all duration-200"
+            style={{ 
+              backgroundColor: bgColor,
+              border: `${borderWidth}px solid ${borderColor}`,
+              borderRadius: '0.5rem',
+              zIndex: -1,
+              boxShadow: selected ? `0 0 20px ${data.color}40` : `0 4px 6px rgba(0, 0, 0, 0.15)`,
+            }} 
+          />
+        );
+    }
+  };
 
   /**
    * Handle quick connect button click - opens a node selector
@@ -132,24 +250,35 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
   };
 
   /**
-   * Handle disconnect button - removes all outgoing edges from this node
+   * Handle disconnect for a specific side
    */
-  const handleDisconnect = (e: React.MouseEvent) => {
+  const handleDisconnectSide = (e: React.MouseEvent, side: 'top' | 'bottom' | 'left' | 'right') => {
     e.stopPropagation();
-    edges.filter(edge => edge.source === id).forEach(edge => {
+    edges.filter(edge => 
+      (edge.source === id && edge.sourceHandle?.startsWith(side)) ||
+      (edge.target === id && edge.targetHandle?.startsWith(side))
+    ).forEach(edge => {
       removeEdge(edge.id);
     });
   };
 
-  /**
-   * Handle removing incoming connections
-   */
-  const handleDisconnectIncoming = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    edges.filter(edge => edge.target === id).forEach(edge => {
-      removeEdge(edge.id);
-    });
-  };
+  // Check for connections on each side
+  const hasTopConnection = edges.some(edge => 
+    (edge.source === id && edge.sourceHandle?.startsWith('top')) ||
+    (edge.target === id && edge.targetHandle?.startsWith('top'))
+  );
+  const hasBottomConnection = edges.some(edge => 
+    (edge.source === id && edge.sourceHandle?.startsWith('bottom')) ||
+    (edge.target === id && edge.targetHandle?.startsWith('bottom'))
+  );
+  const hasLeftConnection = edges.some(edge => 
+    (edge.source === id && edge.sourceHandle?.startsWith('left')) ||
+    (edge.target === id && edge.targetHandle?.startsWith('left'))
+  );
+  const hasRightConnection = edges.some(edge => 
+    (edge.source === id && edge.sourceHandle?.startsWith('right')) ||
+    (edge.target === id && edge.targetHandle?.startsWith('right'))
+  );
 
   // Common handle styles
   const handleStyle = {
@@ -157,40 +286,73 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
   };
 
   return (
-    <>
-      {/* Node Resizer - visible when selected */}
-      <NodeResizer
-        minWidth={100}
-        minHeight={50}
-        isVisible={selected}
-        lineClassName="!border-arch-primary"
-        handleClassName="!w-2 !h-2 !bg-arch-primary !border-arch-primary"
-      />
-      <div
-        className={`
-          relative px-4 py-3
-          backdrop-blur-sm 
-          shadow-lg transition-all duration-200
-          min-w-[120px] group
-          ${selected ? 'ring-2 ring-arch-primary ring-opacity-50' : ''}
-        `}
+    <div
+      className="relative group"
+      onMouseEnter={() => setShowConnectButtons(true)}
+      onMouseLeave={() => setShowConnectButtons(false)}
+      style={shapeStyles}
+    >
+      {/* Shape Background Layer */}
+      {renderShapeBackground()}
+
+      {/* Node Content - Centered and unclipped */}
+      <div 
+        className="relative z-10 flex flex-col items-center justify-center p-4 pointer-events-none"
         style={{
-          borderColor: borderColor,
-          borderWidth: `${borderWidth}px`,
-          borderStyle: 'solid',
-          backgroundColor: bgColor,
-          width: nodeWidth ? `${nodeWidth}px` : '100%',
-          height: nodeHeight ? `${nodeHeight}px` : '100%',
-          ...shapeStyles,
+          // Adjust content position for specific shapes to appear visually centered
+          transform: shape === 'triangle' ? 'translateY(10%)' : 'none'
         }}
-        onMouseEnter={() => setShowConnectButtons(true)}
-        onMouseLeave={() => setShowConnectButtons(false)}
       >
-      {/* Top Handle - Input & Output */}
+        {/* Icon */}
+        <div 
+          className="transition-transform duration-200"
+          style={{ color: data.color }}
+        >
+          <Icon size={iconSize} strokeWidth={1.5} />
+        </div>
+
+        {/* Label */}
+        {(data.label || (data.labelLines && data.labelLines.length > 0)) && (
+          <div className="mt-2 text-center pointer-events-auto">
+            {/* Primary Label */}
+            {(!data.labelLines || data.labelLines.length === 0) && (
+              <div 
+                className="font-medium leading-tight whitespace-pre-wrap"
+                style={{ 
+                  color: textColor,
+                  fontSize: `${fontSize}px`
+                }}
+              >
+                {data.label}
+              </div>
+            )}
+            
+            {/* Multi-line Labels */}
+            {data.labelLines?.map((line, index) => (
+              <div 
+                key={index}
+                className="leading-tight"
+                style={{ 
+                  color: textColor,
+                  fontSize: `${line.fontSize}px`,
+                  fontWeight: line.fontWeight || 'normal',
+                  marginTop: index > 0 ? '2px' : '0'
+                }}
+              >
+                {line.text}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Handles - Always visible but transparent until hovered/connecting */}
+      {/* Top Handle */}
       <Handle
         type="target"
         position={Position.Top}
         id="top-target"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-top-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
@@ -198,15 +360,17 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
         type="source"
         position={Position.Top}
         id="top-source"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-top-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
 
-      {/* Bottom Handle - Input & Output */}
+      {/* Bottom Handle */}
       <Handle
         type="target"
         position={Position.Bottom}
         id="bottom-target"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-bottom-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
@@ -214,15 +378,17 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
         type="source"
         position={Position.Bottom}
         id="bottom-source"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-bottom-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
 
-      {/* Left Handle - Input & Output */}
+      {/* Left Handle */}
       <Handle
         type="target"
         position={Position.Left}
         id="left-target"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-left-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
@@ -230,15 +396,17 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
         type="source"
         position={Position.Left}
         id="left-source"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-left-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
 
-      {/* Right Handle - Input & Output */}
+      {/* Right Handle */}
       <Handle
         type="target"
         position={Position.Right}
         id="right-target"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-right-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
@@ -246,83 +414,63 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
         type="source"
         position={Position.Right}
         id="right-source"
+        isConnectable={true}
         className={`!w-2.5 !h-2.5 !border-2 !border-arch-surface !-right-1.5 transition-opacity duration-150 ${showHandles ? '!opacity-100' : '!opacity-0'}`}
         style={handleStyle}
       />
 
       {/* Disconnect incoming button - Left side */}
-      {showConnectButtons && hasIncomingEdge && (
+      {showConnectButtons && hasLeftConnection && (
         <button
-          onClick={handleDisconnectIncoming}
+          onClick={(e) => handleDisconnectSide(e, 'left')}
           className="absolute -left-7 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full 
                      bg-red-500/80 hover:bg-red-500 
                      flex items-center justify-center transition-all duration-150 z-10
                      shadow-lg hover:scale-110"
-          title="Disconnect incoming"
+          title="Disconnect left"
         >
           <X size={12} className="text-white" />
         </button>
       )}
 
-      {/* Node Content */}
-      <div 
-        className="flex items-center gap-3"
-        style={{ transform: contentRotation }}
-      >
-        <div
-          className="p-1.5 rounded-md flex-shrink-0 transition-all duration-200"
-          style={{ 
-            backgroundColor: `${data.color}20`,
-            padding: iconSize > 24 ? '8px' : '6px',
-          }}
+      {/* Disconnect button - Top side */}
+      {showConnectButtons && hasTopConnection && (
+        <button
+          onClick={(e) => handleDisconnectSide(e, 'top')}
+          className="absolute left-1/2 -top-7 -translate-x-1/2 w-5 h-5 rounded-full 
+                     bg-red-500/80 hover:bg-red-500 
+                     flex items-center justify-center transition-all duration-150 z-10
+                     shadow-lg hover:scale-110"
+          title="Disconnect top"
         >
-          <Icon size={iconSize} color={data.color} strokeWidth={2} />
-        </div>
-        <div className="flex flex-col">
-          {/* Multi-line labels support */}
-          {data.labelLines && data.labelLines.length > 0 ? (
-            data.labelLines.map((line, index) => (
-              <span
-                key={index}
-                className="leading-tight"
-                style={{ 
-                  fontSize: `${line.fontSize}px`, 
-                  color: textColor,
-                  fontWeight: line.fontWeight || 'normal',
-                }}
-              >
-                {line.text}
-              </span>
-            ))
-          ) : (
-            <span
-              className="font-medium leading-tight"
-              style={{ fontSize: `${fontSize}px`, color: textColor }}
-            >
-              {data.label}
-            </span>
-          )}
-          {data.description && (
-            <span 
-              className="text-xs mt-0.5 max-w-[150px] truncate"
-              style={{ color: secondaryTextColor }}
-            >
-              {data.description}
-            </span>
-          )}
-        </div>
-      </div>
+          <X size={12} className="text-white" />
+        </button>
+      )}
+
+      {/* Disconnect button - Bottom side */}
+      {showConnectButtons && hasBottomConnection && (
+        <button
+          onClick={(e) => handleDisconnectSide(e, 'bottom')}
+          className="absolute left-1/2 -bottom-7 -translate-x-1/2 w-5 h-5 rounded-full 
+                     bg-red-500/80 hover:bg-red-500 
+                     flex items-center justify-center transition-all duration-150 z-10
+                     shadow-lg hover:scale-110"
+          title="Disconnect bottom"
+        >
+          <X size={12} className="text-white" />
+        </button>
+      )}
 
       {/* Quick connect/disconnect buttons - Right side */}
       {showConnectButtons && (
         <div className="absolute -right-7 top-1/2 -translate-y-1/2 flex flex-col gap-1">
-          {hasOutgoingEdge && (
+          {hasRightConnection && (
             <button
-              onClick={handleDisconnect}
+              onClick={(e) => handleDisconnectSide(e, 'right')}
               className="w-5 h-5 rounded-full bg-red-500/80 hover:bg-red-500 
                          flex items-center justify-center transition-all duration-150 z-10
                          shadow-lg hover:scale-110"
-              title="Disconnect outgoing"
+              title="Disconnect right"
             >
               <X size={12} className="text-white" />
             </button>
@@ -338,8 +486,16 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
           </button>
         </div>
       )}
+
+      {/* Node Resizer - Only visible when selected */}
+      <NodeResizer 
+        isVisible={selected} 
+        minWidth={shape === 'circle' || shape === 'diamond' ? 80 : 100}
+        minHeight={shape === 'circle' || shape === 'diamond' ? 80 : 50}
+        handleStyle={{ width: 8, height: 8, borderRadius: 4 }}
+        lineStyle={{ border: `1px solid ${data.color}` }}
+      />
     </div>
-    </>
   );
 }
 

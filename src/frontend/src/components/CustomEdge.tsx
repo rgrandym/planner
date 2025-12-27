@@ -1,13 +1,20 @@
+import { useConnectionPointsStore } from '@/store/connectionPointsStore';
 import { useFlowStore } from '@/store/flowStore';
 import { ArrowHeadStyle, useGlobalSettingsStore } from '@/store/globalSettingsStore';
+import { useUIStore } from '@/store/uiStore';
 import { EdgeLineStyle } from '@/types';
 import {
-    calculateHandleOffset,
+    DestinationConnectionPoint,
+    OriginConnectionPoint,
+} from '@/types/connectionPoints';
+import { getPixelPosition } from '@/utils/connectionPointUtils';
+import {
     generateSmoothPath,
     getPositionFromHandleId,
 } from '@/utils/edgeRouting';
-import { memo, useMemo } from 'react';
-import { EdgeProps, Position, useReactFlow } from 'reactflow';
+import { X } from 'lucide-react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EdgeLabelRenderer, EdgeProps, Position, useReactFlow } from 'reactflow';
 
 /**
  * Get stroke dasharray based on line style
@@ -21,25 +28,6 @@ function getStrokeDasharray(lineStyle: EdgeLineStyle): string {
     case 'solid':
     default:
       return 'none';
-  }
-}
-
-/**
- * Generate arrow head path based on style
- */
-function getArrowHeadPath(style: ArrowHeadStyle): string {
-  switch (style) {
-    case 'filled':
-      return 'M2,2 L10,6 L2,10 L4,6 L2,2';
-    case 'outlined':
-      return 'M2,2 L10,6 L2,10';
-    case 'diamond':
-      return 'M1,6 L6,2 L11,6 L6,10 Z';
-    case 'circle':
-      return 'M6,2 A4,4 0 1,1 6,10 A4,4 0 1,1 6,2';
-    case 'none':
-    default:
-      return '';
   }
 }
 
@@ -76,8 +64,9 @@ function getParallelEdgeInfo(
  * - Smart routing for multiple connections from same side
  * - Configurable arrowhead markers (filled, outlined, diamond, circle, none)
  * - Line style customization (solid, dashed, dotted)
- * - Connection point indicators (small circles at attachment points)
+ * - Draggable connection point markers at origins (dot/diamond) and destinations (rectangle)
  * - Edge labels for annotations (like "true/false" branches)
+ * - Auto-spacing for multiple connectors on same node side
  */
 function CustomEdgeComponent({
   id,
@@ -96,12 +85,116 @@ function CustomEdgeComponent({
   selected,
 }: EdgeProps) {
   const edges = useFlowStore((state) => state.edges);
+  const setSelectedEdgeId = useFlowStore((state) => state.setSelectedEdgeId);
+  const setSelectedNodeId = useFlowStore((state) => state.setSelectedNodeId);
+  const removeEdge = useFlowStore((state) => state.removeEdge);
   const { getNode } = useReactFlow();
   const globalSettings = useGlobalSettingsStore();
-
+  
+  const pathRef = useRef<SVGPathElement>(null);
+  
+  // Connection points store
+  const {
+    getConnectionPoints,
+    initializeConnectionPoints,
+    recalculateAutoSpacing,
+  } = useConnectionPointsStore();
+  
   // Get source and target nodes for dimension calculations
   const sourceNode = getNode(source);
   const targetNode = getNode(target);
+  
+  // Initialize connection points for this edge if not exists
+  const [initialized, setInitialized] = useState(false);
+  
+  useEffect(() => {
+    if (!initialized) {
+      const edge = edges.find(e => e.id === id);
+      if (edge) {
+        initializeConnectionPoints(edge, edges);
+        setInitialized(true);
+      }
+    }
+  }, [id, edges, initialized, initializeConnectionPoints]);
+  
+  // Recalculate auto-spacing when edges change
+  useEffect(() => {
+    if (sourceNode) {
+      const sourceSide = getPositionFromHandleId(sourceHandleId || 'right-source');
+      recalculateAutoSpacing(source, sourceSide, edges);
+    }
+    if (targetNode) {
+      const targetSide = getPositionFromHandleId(targetHandleId || 'left-target');
+      recalculateAutoSpacing(target, targetSide, edges);
+    }
+  }, [edges.length, source, target, sourceHandleId, targetHandleId, sourceNode, targetNode, recalculateAutoSpacing]);
+  
+  // Get connection point configurations
+  const connectionPointConfig = getConnectionPoints(id);
+  
+  // Get source and target positions from connection points or fall back to defaults
+  const sourceSide = sourcePosition || Position.Right;
+  const targetSide = targetPosition || Position.Left;
+  
+  // Create default connection point configs if not available
+  const originConfig: OriginConnectionPoint = connectionPointConfig?.origin || {
+    type: 'origin',
+    position: 0.5,
+    isManuallyPositioned: false,
+    side: sourceSide,
+    markerStyle: 'circle',
+  };
+  
+  const destinationConfig: DestinationConnectionPoint = connectionPointConfig?.destination || {
+    type: 'destination',
+    position: 0.5,
+    isManuallyPositioned: false,
+    side: targetSide,
+    markerStyle: 'rectangle',
+  };
+
+  /**
+   * Handle edge click to select the edge
+   */
+  const handleEdgeClick = useCallback(
+    (event: React.MouseEvent) => {
+      // Allow event to bubble to React Flow for selection handling
+      // But also explicitly set selection here to ensure it works
+      console.log('Edge clicked (CustomEdge):', id);
+      setSelectedEdgeId(id);
+      setSelectedNodeId(null);
+      
+      // Force right panel to be visible when an edge is selected
+      // This ensures the property panel opens even if it was closed
+      const { setRightPanelVisible } = useUIStore.getState();
+      setRightPanelVisible(true);
+    },
+    [id, setSelectedEdgeId, setSelectedNodeId]
+  );
+
+  /**
+   * Handle delete button click
+   */
+  const handleDelete = useCallback(
+    (event: React.MouseEvent) => {
+      // Allow event to bubble
+      removeEdge(id);
+      setSelectedEdgeId(null);
+    },
+    [id, removeEdge, setSelectedEdgeId]
+  );
+
+  /**
+   * Handle mouse down on edge for better click detection
+   */
+  const handleEdgeMouseDown = useCallback(
+    (event: React.MouseEvent) => {
+      // Only handle left mouse button
+      if (event.button !== 0) return;
+      event.stopPropagation();
+    },
+    []
+  );
 
   // Get edge properties with fallbacks to global settings
   const strokeColor = (style.stroke as string) || globalSettings.defaultLineColor;
@@ -113,30 +206,17 @@ function CustomEdgeComponent({
     (data?.arrowHeadStyle as ArrowHeadStyle) || globalSettings.defaultArrowHeadStyle;
   const edgeLabel = data?.label as string | undefined;
 
-  // Calculate handle offsets for multiple connections per side
-  const sourceOffset = useMemo(
-    () =>
-      calculateHandleOffset(
-        id,
-        source,
-        sourcePosition || Position.Right,
-        true,
-        edges
-      ),
-    [id, source, sourcePosition, edges]
-  );
-
-  const targetOffset = useMemo(
-    () =>
-      calculateHandleOffset(
-        id,
-        target,
-        targetPosition || Position.Left,
-        false,
-        edges
-      ),
-    [id, target, targetPosition, edges]
-  );
+  // Get node dimensions for connection point calculations
+  const sourceNodeWidth = sourceNode?.width || 150;
+  const sourceNodeHeight = sourceNode?.height || 50;
+  const targetNodeWidth = targetNode?.width || 150;
+  const targetNodeHeight = targetNode?.height || 50;
+  
+  // Get node positions
+  const sourceNodeX = sourceNode?.position.x || 0;
+  const sourceNodeY = sourceNode?.position.y || 0;
+  const targetNodeX = targetNode?.position.x || 0;
+  const targetNodeY = targetNode?.position.y || 0;
 
   // Get parallel edge info for curve separation
   const { index: parallelIndex, total: parallelTotal } = useMemo(
@@ -144,47 +224,28 @@ function CustomEdgeComponent({
     [id, source, sourceHandleId, edges]
   );
 
-  // Calculate adjusted positions based on node dimensions and offsets
-  const getAdjustedPosition = (
-    baseX: number,
-    baseY: number,
-    position: Position,
-    offset: number,
-    node: typeof sourceNode
-  ) => {
-    if (!node) return { x: baseX, y: baseY };
-
-    const nodeWidth = node.width || 150;
-    const nodeHeight = node.height || 50;
-    const isHorizontal = position === Position.Top || position === Position.Bottom;
-    const offsetPx = offset * (isHorizontal ? nodeWidth : nodeHeight) * 0.6;
-
-    switch (position) {
-      case Position.Top:
-      case Position.Bottom:
-        return { x: baseX + offsetPx, y: baseY };
-      case Position.Left:
-      case Position.Right:
-        return { x: baseX, y: baseY + offsetPx };
-      default:
-        return { x: baseX, y: baseY };
-    }
-  };
-
-  const adjustedSource = getAdjustedPosition(
-    sourceX,
-    sourceY,
-    sourcePosition || Position.Right,
-    sourceOffset,
-    sourceNode
-  );
-  const adjustedTarget = getAdjustedPosition(
-    targetX,
-    targetY,
-    targetPosition || Position.Left,
-    targetOffset,
-    targetNode
-  );
+  // Calculate actual positions using connection point normalized positions
+  const adjustedSource = useMemo(() => {
+    return getPixelPosition(
+      originConfig.position,
+      originConfig.side,
+      sourceNodeX,
+      sourceNodeY,
+      sourceNodeWidth,
+      sourceNodeHeight
+    );
+  }, [originConfig.position, originConfig.side, sourceNodeX, sourceNodeY, sourceNodeWidth, sourceNodeHeight]);
+  
+  const adjustedTarget = useMemo(() => {
+    return getPixelPosition(
+      destinationConfig.position,
+      destinationConfig.side,
+      targetNodeX,
+      targetNodeY,
+      targetNodeWidth,
+      targetNodeHeight
+    );
+  }, [destinationConfig.position, destinationConfig.side, targetNodeX, targetNodeY, targetNodeWidth, targetNodeHeight]);
 
   // Generate smooth bezier path with smart routing
   const edgePath = useMemo(
@@ -194,8 +255,8 @@ function CustomEdgeComponent({
         adjustedSource.y,
         adjustedTarget.x,
         adjustedTarget.y,
-        sourcePosition || Position.Right,
-        targetPosition || Position.Left,
+        originConfig.side,
+        destinationConfig.side,
         parallelIndex,
         parallelTotal
       ),
@@ -204,53 +265,23 @@ function CustomEdgeComponent({
       adjustedSource.y,
       adjustedTarget.x,
       adjustedTarget.y,
-      sourcePosition,
-      targetPosition,
+      originConfig.side,
+      destinationConfig.side,
       parallelIndex,
       parallelTotal,
     ]
   );
 
   // Generate unique marker ID for this edge's combination of color, style, and size
+  // This matches the ID generated in EdgeMarkerDefs
   const markerId = `arrowhead-${id}-${strokeColor.replace('#', '')}-${arrowHeadStyle}-${arrowHeadSize}`;
-
-  // Calculate arrow size proportional to stroke width
-  const baseArrowSize = 12;
-  const scaledArrowSize = baseArrowSize * arrowHeadSize * (1 + (strokeWidth - 2) * 0.15);
 
   // Calculate label position (middle of the curve)
   const labelX = (adjustedSource.x + adjustedTarget.x) / 2;
   const labelY = (adjustedSource.y + adjustedTarget.y) / 2 - 10;
 
-  // Connection point indicator size
-  const connectionPointSize = 4;
-
   return (
-    <g className="react-flow__edge">
-      {/* SVG Defs for arrowhead marker */}
-      {arrowHeadStyle !== 'none' && (
-        <defs>
-          <marker
-            id={markerId}
-            markerWidth={scaledArrowSize}
-            markerHeight={scaledArrowSize}
-            refX={arrowHeadStyle === 'circle' ? 6 : 10}
-            refY="6"
-            orient="auto"
-            markerUnits="userSpaceOnUse"
-          >
-            <path
-              d={getArrowHeadPath(arrowHeadStyle)}
-              fill={arrowHeadStyle === 'outlined' ? 'none' : strokeColor}
-              stroke={arrowHeadStyle === 'outlined' ? strokeColor : 'none'}
-              strokeWidth={arrowHeadStyle === 'outlined' ? 1.5 : 0}
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          </marker>
-        </defs>
-      )}
-
+    <>
       {/* Selection highlight (behind main edge) */}
       {selected && (
         <path
@@ -264,7 +295,7 @@ function CustomEdgeComponent({
         />
       )}
 
-      {/* Main Edge Path */}
+      {/* Main Edge Path - arrowhead is rendered in ConnectionPointsOverlay */}
       <path
         id={id}
         d={edgePath}
@@ -274,42 +305,27 @@ function CustomEdgeComponent({
         strokeDasharray={getStrokeDasharray(lineStyle)}
         strokeLinecap="round"
         strokeLinejoin="round"
-        markerEnd={arrowHeadStyle !== 'none' ? `url(#${markerId})` : undefined}
         className="react-flow__edge-path"
-        style={{ cursor: 'pointer' }}
+        style={{ cursor: 'pointer', pointerEvents: 'all' }}
+        ref={pathRef}
+        onClick={handleEdgeClick}
+        onMouseDown={handleEdgeMouseDown}
       />
 
-      {/* Invisible wider path for easier selection */}
+      {/* Invisible wider path for easier selection - uses rgba for better event handling */}
       <path
         d={edgePath}
         fill="none"
-        stroke="transparent"
-        strokeWidth={20}
-        style={{ cursor: 'pointer' }}
+        stroke="rgba(255, 255, 255, 0)"
+        strokeWidth={30}
+        strokeLinecap="round"
+        style={{ cursor: 'pointer', pointerEvents: 'all' }}
         className="react-flow__edge-interaction"
+        onClick={handleEdgeClick}
+        onMouseDown={handleEdgeMouseDown}
       />
 
-      {/* Connection point indicator at source */}
-      <circle
-        cx={adjustedSource.x}
-        cy={adjustedSource.y}
-        r={connectionPointSize}
-        fill={strokeColor}
-        stroke="#1e1e1e"
-        strokeWidth={1.5}
-        className="react-flow__edge-connection-point"
-      />
-
-      {/* Connection point indicator at target */}
-      <circle
-        cx={adjustedTarget.x}
-        cy={adjustedTarget.y}
-        r={connectionPointSize}
-        fill={strokeColor}
-        stroke="#1e1e1e"
-        strokeWidth={1.5}
-        className="react-flow__edge-connection-point"
-      />
+      {/* Connection point markers are rendered by ConnectionPointsOverlay for proper z-index */}
 
       {/* Edge Label */}
       {edgeLabel && (
@@ -337,7 +353,32 @@ function CustomEdgeComponent({
           </text>
         </g>
       )}
-    </g>
+
+      {/* Delete Button - shows when selected */}
+      {selected && (
+        <EdgeLabelRenderer>
+          <div
+            style={{
+              position: 'absolute',
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: 'all',
+              zIndex: 1000,
+            }}
+            className="nodrag nopan"
+          >
+            <button
+              onClick={handleDelete}
+              className="w-6 h-6 rounded-full bg-red-500 hover:bg-red-600 
+                         flex items-center justify-center transition-all duration-150
+                         shadow-lg hover:scale-110 border border-red-600"
+              title="Delete edge"
+            >
+              <X size={14} className="text-white" />
+            </button>
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </>
   );
 }
 

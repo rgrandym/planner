@@ -1,8 +1,10 @@
+import { useConnectionPointsStore } from '@/store/connectionPointsStore';
 import { useFlowStore } from '@/store/flowStore';
 import { ARROW_HEAD_STYLES, ArrowHeadStyle, useGlobalSettingsStore } from '@/store/globalSettingsStore';
 import { useUIStore } from '@/store/uiStore';
 import { EdgeLineStyle } from '@/types';
-import { ArrowRight, Pin, PinOff, Trash2, X } from 'lucide-react';
+import { OriginMarkerStyle } from '@/types/connectionPoints';
+import { ArrowRight, Circle, Diamond, Pin, PinOff, RotateCcw, Trash2, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { ColorPicker } from './ColorPicker';
 
@@ -16,6 +18,14 @@ const LINE_STYLES: { value: EdgeLineStyle; label: string }[] = [
 ];
 
 /**
+ * Origin marker style options
+ */
+const ORIGIN_MARKER_STYLES: { value: OriginMarkerStyle; label: string; icon: typeof Circle }[] = [
+  { value: 'circle', label: 'Circle', icon: Circle },
+  { value: 'diamond', label: 'Diamond', icon: Diamond },
+];
+
+/**
  * EdgePropertyPanel Component
  * Panel for editing edge (connector) properties.
  * Features:
@@ -23,6 +33,8 @@ const LINE_STYLES: { value: EdgeLineStyle; label: string }[] = [
  * - Stroke width slider
  * - Line style selector (solid, dashed, dotted)
  * - Arrow head size and style
+ * - Connection point marker style (circle/diamond for origin)
+ * - Draggable connection point reset
  * - Animation toggle
  * - Delete button
  */
@@ -30,11 +42,21 @@ export function EdgePropertyPanel() {
   const { edges, selectedEdgeId, updateEdge, removeEdge, setSelectedEdgeId } = useFlowStore();
   const globalSettings = useGlobalSettingsStore();
   const { isPropertyPanelPinned, togglePropertyPanelPinned } = useUIStore();
+  
+  // Connection points store
+  const {
+    getConnectionPoints,
+    setOriginMarkerStyle,
+    resetToAutoPosition,
+  } = useConnectionPointsStore();
 
   const selectedEdge = useMemo(
     () => edges.find((e) => e.id === selectedEdgeId),
     [edges, selectedEdgeId]
   );
+  
+  // Get connection point configuration for this edge
+  const connectionPoints = selectedEdgeId ? getConnectionPoints(selectedEdgeId) : undefined;
 
   if (!selectedEdge) {
     return null;
@@ -48,6 +70,10 @@ export function EdgePropertyPanel() {
   const arrowHeadStyle: ArrowHeadStyle = (selectedEdge.data?.arrowHeadStyle as ArrowHeadStyle) || globalSettings.defaultArrowHeadStyle;
   const isAnimated = selectedEdge.animated || false;
   const edgeLabel = (selectedEdge.data?.label as string) || '';
+  const labelFontSize = (selectedEdge.data?.labelFontSize as number) || 11;
+  const labelColor = (selectedEdge.data?.labelColor as string) || '#ffffff';
+  const labelBgColor = (selectedEdge.data?.labelBgColor as string) || '#1e1e1e';
+  const labelPosition = (selectedEdge.data?.labelPosition as number) || 0.5;
 
   /**
    * Update edge style
@@ -126,9 +152,13 @@ export function EdgePropertyPanel() {
             {isPropertyPanelPinned ? <Pin size={14} /> : <PinOff size={14} />}
           </button>
           <button
-            onClick={() => setSelectedEdgeId(null)}
+            onClick={() => {
+              const { setRightPanelVisible } = useUIStore.getState();
+              setRightPanelVisible(false);
+              setSelectedEdgeId(null);
+            }}
             className="p-1 hover:bg-arch-surface-light rounded transition-colors"
-            title="Deselect edge"
+            title="Close panel"
           >
             <X size={18} className="text-gray-400" />
           </button>
@@ -142,20 +172,78 @@ export function EdgePropertyPanel() {
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
             Label
           </h3>
-          <div>
-            <label className="block text-sm text-gray-300 mb-1">Edge Label</label>
-            <input
-              type="text"
-              value={edgeLabel}
-              onChange={(e) => handleDataUpdate('label', e.target.value)}
-              placeholder="e.g., true, false, next..."
-              className="w-full px-3 py-2 bg-arch-bg border border-arch-border rounded-lg
-                         text-white text-sm focus:border-arch-primary focus:ring-1 
-                         focus:ring-arch-primary outline-none transition-colors"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Label appears at the middle of the connector
-            </p>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm text-gray-300 mb-1">Label Text</label>
+              <input
+                type="text"
+                value={edgeLabel}
+                onChange={(e) => handleDataUpdate('label', e.target.value)}
+                placeholder="e.g., true, false, next..."
+                className="w-full px-3 py-2 bg-arch-bg border border-arch-border rounded-lg
+                           text-white text-sm focus:border-arch-primary focus:ring-1 
+                           focus:ring-arch-primary outline-none transition-colors"
+              />
+            </div>
+
+            {edgeLabel && (
+              <>
+                {/* Label Font Size */}
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2">
+                    Font Size: {labelFontSize}px
+                  </label>
+                  <input
+                    type="range"
+                    min={8}
+                    max={18}
+                    value={labelFontSize}
+                    onChange={(e) => handleDataUpdate('labelFontSize', parseInt(e.target.value))}
+                    className="w-full accent-arch-primary"
+                  />
+                </div>
+
+                {/* Label Position */}
+                <div>
+                  <label className="block text-sm text-gray-300 mb-2">
+                    Position: {Math.round(labelPosition * 100)}%
+                  </label>
+                  <input
+                    type="range"
+                    min={10}
+                    max={90}
+                    value={labelPosition * 100}
+                    onChange={(e) => handleDataUpdate('labelPosition', parseInt(e.target.value) / 100)}
+                    className="w-full accent-arch-primary"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    0% = near source, 100% = near target
+                  </p>
+                </div>
+
+                {/* Label Colors */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Text Color</label>
+                    <input
+                      type="color"
+                      value={labelColor}
+                      onChange={(e) => handleDataUpdate('labelColor', e.target.value)}
+                      className="w-full h-8 rounded cursor-pointer bg-arch-bg border border-arch-border"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Background</label>
+                    <input
+                      type="color"
+                      value={labelBgColor}
+                      onChange={(e) => handleDataUpdate('labelBgColor', e.target.value)}
+                      className="w-full h-8 rounded cursor-pointer bg-arch-bg border border-arch-border"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </section>
 
@@ -258,6 +346,97 @@ export function EdgePropertyPanel() {
                 Scales proportionally with line thickness
               </p>
             </div>
+          </div>
+        </section>
+
+        {/* Connection Points Section */}
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Connection Points
+          </h3>
+          <div className="space-y-4">
+            {/* Origin Marker Style */}
+            <div>
+              <label className="block text-sm text-gray-300 mb-2">Origin Marker</label>
+              <div className="flex gap-2">
+                {ORIGIN_MARKER_STYLES.map((style) => {
+                  const Icon = style.icon;
+                  const isSelected = connectionPoints?.origin.markerStyle === style.value;
+                  return (
+                    <button
+                      key={style.value}
+                      onClick={() => setOriginMarkerStyle(selectedEdge.id, style.value)}
+                      className={`
+                        flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all text-xs font-medium
+                        ${isSelected
+                          ? 'border-arch-primary bg-arch-primary/10 text-arch-primary'
+                          : 'border-arch-border bg-arch-bg text-gray-400 hover:border-gray-600'
+                        }
+                      `}
+                    >
+                      <Icon size={14} />
+                      {style.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                The marker style shown where the connector leaves the source node
+              </p>
+            </div>
+
+            {/* Manual Position Info */}
+            <div className="bg-arch-bg rounded-lg p-3 border border-arch-border">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-gray-300">Position Status</span>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400">Origin:</span>
+                  <span className={connectionPoints?.origin.isManuallyPositioned ? 'text-green-400' : 'text-gray-500'}>
+                    {connectionPoints?.origin.isManuallyPositioned ? 'Custom' : 'Auto'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-400">Destination:</span>
+                  <span className={connectionPoints?.destination.isManuallyPositioned ? 'text-green-400' : 'text-gray-500'}>
+                    {connectionPoints?.destination.isManuallyPositioned ? 'Custom' : 'Auto'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Reset Buttons */}
+            {(connectionPoints?.origin.isManuallyPositioned || connectionPoints?.destination.isManuallyPositioned) && (
+              <div className="flex gap-2">
+                {connectionPoints?.origin.isManuallyPositioned && (
+                  <button
+                    onClick={() => resetToAutoPosition(selectedEdge.id, 'origin')}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 
+                               bg-arch-bg hover:bg-arch-surface-light border border-arch-border 
+                               rounded-lg text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    Reset Origin
+                  </button>
+                )}
+                {connectionPoints?.destination.isManuallyPositioned && (
+                  <button
+                    onClick={() => resetToAutoPosition(selectedEdge.id, 'destination')}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 
+                               bg-arch-bg hover:bg-arch-surface-light border border-arch-border 
+                               rounded-lg text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                  >
+                    <RotateCcw size={12} />
+                    Reset Dest
+                  </button>
+                )}
+              </div>
+            )}
+
+            <p className="text-xs text-gray-500">
+              Drag connection point markers on the canvas to manually position them
+            </p>
           </div>
         </section>
 

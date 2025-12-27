@@ -27,7 +27,8 @@ export type NodeShape =
   | 'circle'
   | 'diamond'
   | 'hexagon'
-  | 'rounded';
+  | 'rounded'
+  | 'triangle';
 
 /**
  * A single line of label text with its own font size
@@ -97,6 +98,12 @@ export interface ArchNodeData {
   shape?: NodeShape;
   /** Custom width (50-400) */
   width?: number;
+  /** Custom height (50-400) */
+  height?: number;
+  /** Icon sizing mode */
+  iconSizeMode?: 'ratio' | 'fixed' | 'free';
+  /** Multi-line label configuration */
+  labelLines?: LabelLine[];
   /** Custom height (50-400) */
   height?: number;
   /** Multi-line label support - array of lines with individual font sizes */

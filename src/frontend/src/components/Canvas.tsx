@@ -2,11 +2,13 @@ import { DragEvent, useCallback, useEffect, useRef, useState } from 'react';
 import ReactFlow, {
     Background,
     BackgroundVariant,
+    ConnectionMode,
     Controls,
     EdgeTypes,
     MiniMap,
     Node,
     NodeTypes,
+    OnSelectionChangeParams,
     ReactFlowInstance,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
@@ -21,8 +23,10 @@ import { useUIStore } from '@/store/uiStore';
 import { ArchNodeData, NodeTypeConfig } from '@/types';
 import { Map } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { ConnectionPointsOverlay } from './ConnectionPointsOverlay';
 import { ContextMenu } from './ContextMenu';
 import { CustomEdge } from './CustomEdge';
+import { EdgeMarkerDefs } from './EdgeMarkerDefs';
 import { ExportModal } from './ExportModal';
 import { ProjectModal } from './ProjectModal';
 import { QuickConnectMenu } from './QuickConnectMenu';
@@ -248,6 +252,13 @@ export function Canvas() {
             borderColor: borderColor,
             borderWidth: globalSettings.defaultBorderWidth,
             iconSize: globalSettings.defaultIconSize,
+            iconSizeMode: globalSettings.defaultIconSizeMode,
+            // Apply custom node properties if available
+            width: (nodeType as any).width,
+            height: (nodeType as any).height,
+            // If custom node has specific icon settings, override defaults
+            ...((nodeType as any).iconSizeMode ? { iconSizeMode: (nodeType as any).iconSizeMode } : {}),
+            ...((nodeType as any).iconSize ? { iconSize: (nodeType as any).iconSize } : {}),
           },
         };
 
@@ -262,7 +273,22 @@ export function Canvas() {
    */
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
+      // Single click selects the node in our store too, but doesn't open the panel
+      // This ensures that if we click a node, it is "selected" for deletion etc.
+      // But we don't force the panel open.
+      // If the panel is ALREADY open (pinned or from previous double click), it will update to show this node.
       setSelectedNodeId(node.id);
+    },
+    [setSelectedNodeId]
+  );
+
+  /**
+   * Handle node double click
+   */
+  const onNodeDoubleClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      setSelectedNodeId(node.id);
+      useUIStore.getState().setRightPanelVisible(true);
     },
     [setSelectedNodeId]
   );
@@ -287,9 +313,45 @@ export function Canvas() {
    * Handle pane click to deselect
    */
   const onPaneClick = useCallback(() => {
+    // Clear selection in store
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setContextMenu(null);
+    
+    // Force deselect all nodes visually in React Flow
+    // We need to create a new array reference to ensure React Flow detects the change
+    const { nodes, edges, onNodesChange, onEdgesChange } = useFlowStore.getState();
+    
+    const nodeChanges = nodes
+      .filter(n => n.selected)
+      .map((node) => ({
+        id: node.id,
+        type: 'select' as const,
+        selected: false,
+      }));
+
+    const edgeChanges = edges
+      .filter(e => e.selected)
+      .map((edge) => ({
+        id: edge.id,
+        type: 'select' as const,
+        selected: false,
+      }));
+
+    if (nodeChanges.length > 0) {
+      onNodesChange(nodeChanges);
+    }
+    
+    if (edgeChanges.length > 0) {
+      onEdgesChange(edgeChanges);
+    }
+
+    // Also close the right panel when clicking empty space
+    // unless it's pinned
+    const { isPropertyPanelPinned, setRightPanelVisible } = useUIStore.getState();
+    if (!isPropertyPanelPinned) {
+      setRightPanelVisible(false);
+    }
   }, [setSelectedNodeId, setSelectedEdgeId, setContextMenu]);
 
   /**
@@ -297,11 +359,38 @@ export function Canvas() {
    */
   const onEdgeClick = useCallback(
     (_: React.MouseEvent, edge: { id: string }) => {
+      console.log('Edge clicked:', edge.id);
       setSelectedEdgeId(edge.id);
       setSelectedNodeId(null);
     },
     [setSelectedEdgeId, setSelectedNodeId]
   );
+
+  /**
+   * Handle selection change (from React Flow)
+   * This ensures our store state stays in sync with React Flow's internal selection state
+   */
+  const onSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
+    // Sync node selection
+    if (selectedNodes.length === 0) {
+      setSelectedNodeId(null);
+      // Close panel if deselecting all nodes (and not pinned)
+      const { isPropertyPanelPinned, setRightPanelVisible } = useUIStore.getState();
+      if (!isPropertyPanelPinned) {
+        setRightPanelVisible(false);
+      }
+    } else if (selectedNodes.length === 1) {
+      // Update selected node ID but DON'T force panel open (that's for double click)
+      setSelectedNodeId(selectedNodes[0].id);
+    }
+
+    // Sync edge selection
+    if (selectedEdges.length === 0) {
+      setSelectedEdgeId(null);
+    } else if (selectedEdges.length === 1) {
+      setSelectedEdgeId(selectedEdges[0].id);
+    }
+  }, [setSelectedNodeId, setSelectedEdgeId]);
 
   /**
    * Handle viewport changes for persistence
@@ -453,8 +542,17 @@ export function Canvas() {
   return (
     <div 
       ref={reactFlowWrapper} 
-      className="flex-1 h-full relative pt-10"
-      style={{ backgroundColor: bgColor }}
+      className="flex-1 h-full w-full relative pt-10"
+      style={{ backgroundColor: bgColor, minHeight: 0 }}
+      onClick={(e) => {
+        // Ensure we deselect if clicking on the background wrapper or pane
+        // This acts as a fallback if ReactFlow's onPaneClick is blocked
+        const target = e.target as HTMLElement;
+        // Check if target has classList (it might be a Text node or other non-Element node)
+        if (target === reactFlowWrapper.current || (target?.classList && target.classList.contains('react-flow__pane'))) {
+           onPaneClick();
+        }
+      }}
     >
       <ReactFlow
         nodes={nodes}
@@ -466,9 +564,11 @@ export function Canvas() {
         onDrop={onDrop}
         onDragOver={onDragOver}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onEdgeClick={onEdgeClick}
         onPaneClick={onPaneClick}
+        onSelectionChange={onSelectionChange}
         onMoveEnd={onMoveEnd}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -477,6 +577,11 @@ export function Canvas() {
         fitView
         minZoom={0.1}
         maxZoom={2}
+        elementsSelectable={true}
+        edgesFocusable={true}
+        edgesUpdatable={true}
+        selectNodesOnDrag={false}
+        connectionMode={ConnectionMode.Loose}
         connectionLineStyle={{
           stroke: '#06b6d4',
           strokeWidth: 2,
@@ -505,6 +610,12 @@ export function Canvas() {
             maskColor="rgba(0, 0, 0, 0.8)"
           />
         )}
+        
+        {/* Global SVG marker definitions for edge arrowheads */}
+        <EdgeMarkerDefs />
+        
+        {/* Connection Points Overlay - renders on top of nodes */}
+        <ConnectionPointsOverlay />
       </ReactFlow>
 
       {/* Minimap Toggle Button */}

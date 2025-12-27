@@ -85,7 +85,7 @@ export const useUIStore = create<UIStore>()(
     (set, get) => ({
       // Initial state
       isLeftSidebarVisible: true,
-      isRightPanelVisible: true,
+      isRightPanelVisible: false,
       isPropertyPanelPinned: false,
       isMinimapVisible: true,
       isFullViewMode: false,

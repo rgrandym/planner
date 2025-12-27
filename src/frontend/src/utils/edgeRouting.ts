@@ -154,6 +154,7 @@ export function getConnectionPoint(
 /**
  * Generate smooth bezier control points for edge routing
  * Ensures curves don't overlap for parallel edges
+ * Handles self-loops and backward connections with special routing
  */
 export function calculateBezierControlPoints(
   sourceX: number,
@@ -163,11 +164,35 @@ export function calculateBezierControlPoints(
   sourcePosition: Position,
   targetPosition: Position,
   edgeIndex: number = 0,
-  totalParallelEdges: number = 1
+  totalParallelEdges: number = 1,
+  isSelfLoop: boolean = false,
+  isBackwardConnection: boolean = false
 ): { controlPoint1: { x: number; y: number }; controlPoint2: { x: number; y: number } } {
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
   const distance = Math.sqrt(dx * dx + dy * dy);
+
+  // Handle self-loop (node connecting to itself)
+  if (isSelfLoop) {
+    const loopSize = 80 + edgeIndex * 30; // Increase size for multiple self-loops
+    // Create a loop that goes out and comes back
+    return {
+      controlPoint1: { x: sourceX + loopSize, y: sourceY - loopSize },
+      controlPoint2: { x: targetX + loopSize, y: targetY + loopSize },
+    };
+  }
+
+  // Handle backward connection (target is "before" source in typical flow)
+  if (isBackwardConnection) {
+    const loopOffset = 60 + edgeIndex * 25;
+    // Route the connection around the nodes
+    const midY = Math.min(sourceY, targetY) - loopOffset;
+    
+    return {
+      controlPoint1: { x: sourceX, y: midY },
+      controlPoint2: { x: targetX, y: midY },
+    };
+  }
 
   // Base curvature factor
   const baseCurvature = Math.min(distance * 0.4, 150);
@@ -216,6 +241,7 @@ export function calculateBezierControlPoints(
 
 /**
  * Generate SVG path for a smooth bezier curve
+ * Supports self-loops and backward connections
  */
 export function generateSmoothPath(
   sourceX: number,
@@ -225,8 +251,26 @@ export function generateSmoothPath(
   sourcePosition: Position,
   targetPosition: Position,
   edgeIndex: number = 0,
-  totalParallelEdges: number = 1
+  totalParallelEdges: number = 1,
+  isSelfLoop: boolean = false,
+  isBackwardConnection: boolean = false
 ): string {
+  // Self-loop requires a special path - a nice circular loop above the node
+  if (isSelfLoop) {
+    const loopRadius = 50 + edgeIndex * 20;
+    // Create a proper circular self-loop path going up and around
+    const startX = sourceX;
+    const startY = sourceY;
+    // Go up-right, then arc around to up-left, then back down
+    return `M ${startX} ${startY} 
+            C ${startX + loopRadius} ${startY - loopRadius * 0.5},
+              ${startX + loopRadius} ${startY - loopRadius * 1.5},
+              ${startX} ${startY - loopRadius * 1.2}
+            C ${startX - loopRadius} ${startY - loopRadius * 1.5},
+              ${startX - loopRadius} ${startY - loopRadius * 0.5},
+              ${startX} ${startY}`;
+  }
+
   const { controlPoint1, controlPoint2 } = calculateBezierControlPoints(
     sourceX,
     sourceY,
@@ -235,7 +279,9 @@ export function generateSmoothPath(
     sourcePosition,
     targetPosition,
     edgeIndex,
-    totalParallelEdges
+    totalParallelEdges,
+    isSelfLoop,
+    isBackwardConnection
   );
 
   return `M ${sourceX} ${sourceY} C ${controlPoint1.x} ${controlPoint1.y}, ${controlPoint2.x} ${controlPoint2.y}, ${targetX} ${targetY}`;
@@ -273,4 +319,42 @@ export function getBestHandlePositions(
       return { sourcePosition: Position.Top, targetPosition: Position.Bottom };
     }
   }
+}
+
+/**
+ * Calculate the tangent angle (in degrees) of a cubic bezier curve at the endpoint (t=1)
+ * The tangent at t=1 is the direction from control point 2 to the end point
+ */
+export function calculateEndTangentAngle(
+  sourceX: number,
+  sourceY: number,
+  targetX: number,
+  targetY: number,
+  sourcePosition: Position,
+  targetPosition: Position,
+  edgeIndex: number = 0,
+  totalParallelEdges: number = 1
+): number {
+  const { controlPoint2 } = calculateBezierControlPoints(
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    edgeIndex,
+    totalParallelEdges,
+    false,
+    false
+  );
+
+  // The tangent at t=1 is the direction from controlPoint2 to target
+  const dx = targetX - controlPoint2.x;
+  const dy = targetY - controlPoint2.y;
+  
+  // Calculate angle in degrees (0 = pointing right, 90 = pointing down)
+  const angleRad = Math.atan2(dy, dx);
+  const angleDeg = angleRad * (180 / Math.PI);
+  
+  return angleDeg;
 }
