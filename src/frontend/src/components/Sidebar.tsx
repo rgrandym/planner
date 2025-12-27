@@ -3,8 +3,8 @@ import { useCustomNodesStore } from '@/store/customNodesStore';
 import { useThemeStore } from '@/store/themeStore';
 import { useUIStore } from '@/store/uiStore';
 import { CategoryConfig, NodeCategory, NodeTypeConfig } from '@/types';
-import { ChevronDown, ChevronRight, GripVertical } from 'lucide-react';
-import { DragEvent, useMemo, useRef, useState } from 'react';
+import { Check, ChevronDown, ChevronRight, GripVertical, Pencil, X } from 'lucide-react';
+import { DragEvent, KeyboardEvent, useMemo, useRef, useState } from 'react';
 
 /**
  * Sidebar component with draggable node palette
@@ -18,7 +18,7 @@ import { DragEvent, useMemo, useRef, useState } from 'react';
  */
 export function Sidebar() {
   const { customNodes } = useCustomNodesStore();
-  const { categoryOrder, setCategoryOrder } = useUIStore();
+  const { categoryOrder, setCategoryOrder, sidebarLabels, setCategoryLabel } = useUIStore();
   const { mode } = useThemeStore();
   const isDarkMode = mode === 'dark';
   
@@ -26,6 +26,10 @@ export function Sidebar() {
   const [draggedCategoryId, setDraggedCategoryId] = useState<NodeCategory | null>(null);
   const [dragOverCategoryId, setDragOverCategoryId] = useState<NodeCategory | null>(null);
   const dragCounter = useRef(0);
+  
+  // Editing state for category labels
+  const [editingCategoryId, setEditingCategoryId] = useState<NodeCategory | null>(null);
+  const [editingCategoryLabel, setEditingCategoryLabel] = useState('');
   
   // Combine built-in categories with custom nodes category, ordered by preference
   const allCategories = useMemo(() => {
@@ -167,6 +171,47 @@ export function Sidebar() {
     setDragOverCategoryId(null);
     dragCounter.current = 0;
   };
+  
+  /**
+   * Start editing a category label
+   */
+  const startEditingCategory = (categoryId: NodeCategory, currentLabel: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingCategoryId(categoryId);
+    setEditingCategoryLabel(sidebarLabels.categoryLabels[categoryId] || currentLabel);
+  };
+  
+  /**
+   * Save the edited category label
+   */
+  const saveEditingCategory = () => {
+    if (editingCategoryId && editingCategoryLabel.trim()) {
+      setCategoryLabel(editingCategoryId, editingCategoryLabel.trim());
+    }
+    setEditingCategoryId(null);
+    setEditingCategoryLabel('');
+  };
+  
+  /**
+   * Cancel editing category label
+   */
+  const cancelEditingCategory = () => {
+    setEditingCategoryId(null);
+    setEditingCategoryLabel('');
+  };
+  
+  /**
+   * Handle keyboard events for category editing
+   */
+  const handleCategoryEditKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveEditingCategory();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditingCategory();
+    }
+  };
 
   return (
     <aside className={`w-64 flex flex-col h-full border-r transition-colors
@@ -228,26 +273,71 @@ export function Sidebar() {
                 />
               </div>
               
-              <button
-                onClick={() => toggleCategory(category.id)}
-                className={`flex-1 flex items-center justify-between px-2 py-2 
-                           rounded-lg transition-colors`}
-              >
-                <div className="flex items-center gap-2">
+              {editingCategoryId === category.id ? (
+                /* Editing Mode */
+                <div className="flex-1 flex items-center gap-2 px-2 py-2">
                   <div
-                    className="w-2 h-2 rounded-full"
+                    className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{ backgroundColor: category.color }}
                   />
-                  <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
-                    {category.label}
-                  </span>
+                  <input
+                    type="text"
+                    value={editingCategoryLabel}
+                    onChange={(e) => setEditingCategoryLabel(e.target.value)}
+                    onKeyDown={handleCategoryEditKeyDown}
+                    autoFocus
+                    className={`flex-1 text-sm font-medium px-2 py-0.5 rounded outline-none
+                      ${isDarkMode 
+                        ? 'bg-arch-bg text-white border border-arch-primary' 
+                        : 'bg-white text-gray-900 border border-blue-500'
+                      }`}
+                  />
+                  <button
+                    onClick={saveEditingCategory}
+                    className="p-1 rounded hover:bg-green-500/20 text-green-500"
+                    title="Save"
+                  >
+                    <Check size={14} />
+                  </button>
+                  <button
+                    onClick={cancelEditingCategory}
+                    className="p-1 rounded hover:bg-red-500/20 text-red-500"
+                    title="Cancel"
+                  >
+                    <X size={14} />
+                  </button>
                 </div>
-                {expandedCategories.has(category.id) ? (
-                  <ChevronDown size={16} className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />
-                ) : (
-                  <ChevronRight size={16} className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />
-                )}
-              </button>
+              ) : (
+                /* Display Mode */
+                <button
+                  onClick={() => toggleCategory(category.id)}
+                  className={`flex-1 flex items-center justify-between px-2 py-2 
+                             rounded-lg transition-colors group/cat`}
+                >
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="w-2 h-2 rounded-full"
+                      style={{ backgroundColor: category.color }}
+                    />
+                    <span className={`text-sm font-medium ${isDarkMode ? 'text-gray-200' : 'text-gray-700'}`}>
+                      {sidebarLabels.categoryLabels[category.id] || category.label}
+                    </span>
+                    <button
+                      onClick={(e) => startEditingCategory(category.id, category.label, e)}
+                      className={`p-1 rounded opacity-0 group-hover/cat:opacity-100 transition-opacity
+                        ${isDarkMode ? 'hover:bg-arch-border text-gray-400' : 'hover:bg-gray-200 text-gray-500'}`}
+                      title="Edit category name"
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  </div>
+                  {expandedCategories.has(category.id) ? (
+                    <ChevronDown size={16} className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />
+                  ) : (
+                    <ChevronRight size={16} className={isDarkMode ? 'text-gray-400' : 'text-gray-500'} />
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Category Nodes */}
@@ -259,6 +349,7 @@ export function Sidebar() {
                     node={node}
                     onDragStart={onNodeDragStart}
                     isDarkMode={isDarkMode}
+                    customLabel={sidebarLabels.nodeLabels[node.type]}
                   />
                 ))}
               </div>
@@ -284,10 +375,92 @@ interface NodeItemProps {
   node: NodeTypeConfig;
   onDragStart: (event: DragEvent<HTMLDivElement>, node: NodeTypeConfig) => void;
   isDarkMode: boolean;
+  customLabel?: string;
 }
 
-function NodeItem({ node, onDragStart, isDarkMode }: NodeItemProps) {
+function NodeItem({ node, onDragStart, isDarkMode, customLabel }: NodeItemProps) {
+  const { setNodeLabel } = useUIStore();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editLabel, setEditLabel] = useState('');
   const Icon = node.icon;
+  
+  const displayLabel = customLabel || node.label;
+  
+  const startEditing = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setEditLabel(displayLabel);
+    setIsEditing(true);
+  };
+  
+  const saveLabel = () => {
+    if (editLabel.trim()) {
+      setNodeLabel(node.type, editLabel.trim());
+    }
+    setIsEditing(false);
+    setEditLabel('');
+  };
+  
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditLabel('');
+  };
+  
+  const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      saveLabel();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      cancelEditing();
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <div
+        className={`flex items-center gap-2 px-3 py-2 rounded-lg border
+          ${isDarkMode 
+            ? 'bg-arch-bg border-arch-primary' 
+            : 'bg-white border-blue-500'
+          }`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="p-1.5 rounded flex-shrink-0"
+          style={{ backgroundColor: `${node.color}20` }}
+        >
+          <Icon size={16} color={node.color} strokeWidth={2} />
+        </div>
+        <input
+          type="text"
+          value={editLabel}
+          onChange={(e) => setEditLabel(e.target.value)}
+          onKeyDown={handleKeyDown}
+          autoFocus
+          className={`flex-1 text-sm px-1 py-0.5 rounded outline-none min-w-0
+            ${isDarkMode 
+              ? 'bg-arch-surface text-white' 
+              : 'bg-gray-50 text-gray-900'
+            }`}
+        />
+        <button
+          onClick={saveLabel}
+          className="p-1 rounded hover:bg-green-500/20 text-green-500 flex-shrink-0"
+          title="Save"
+        >
+          <Check size={12} />
+        </button>
+        <button
+          onClick={cancelEditing}
+          className="p-1 rounded hover:bg-red-500/20 text-red-500 flex-shrink-0"
+          title="Cancel"
+        >
+          <X size={12} />
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -313,17 +486,25 @@ function NodeItem({ node, onDragStart, isDarkMode }: NodeItemProps) {
     >
       <GripVertical 
         size={14} 
-        className={`transition-colors ${isDarkMode ? 'text-gray-600 group-hover:text-gray-400' : 'text-gray-300 group-hover:text-gray-500'}`}
+        className={`transition-colors flex-shrink-0 ${isDarkMode ? 'text-gray-600 group-hover:text-gray-400' : 'text-gray-300 group-hover:text-gray-500'}`}
       />
       <div
-        className="p-1.5 rounded"
+        className="p-1.5 rounded flex-shrink-0"
         style={{ backgroundColor: `${node.color}20` }}
       >
         <Icon size={16} color={node.color} strokeWidth={2} />
       </div>
-      <span className={`text-sm transition-colors ${isDarkMode ? 'text-gray-300 group-hover:text-white' : 'text-gray-600 group-hover:text-gray-900'}`}>
-        {node.label}
+      <span className={`text-sm transition-colors flex-1 truncate ${isDarkMode ? 'text-gray-300 group-hover:text-white' : 'text-gray-600 group-hover:text-gray-900'}`}>
+        {displayLabel}
       </span>
+      <button
+        onClick={startEditing}
+        className={`p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0
+          ${isDarkMode ? 'hover:bg-arch-border text-gray-400' : 'hover:bg-gray-200 text-gray-500'}`}
+        title="Edit node name"
+      >
+        <Pencil size={12} />
+      </button>
     </div>
   );
 }

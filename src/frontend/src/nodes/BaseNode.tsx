@@ -279,12 +279,29 @@ function BaseNodeComponent({ id, data, selected }: NodeProps<ArchNodeData>) {
           <Icon size={iconSize} color={data.color} strokeWidth={2} />
         </div>
         <div className="flex flex-col">
-          <span
-            className="font-medium leading-tight"
-            style={{ fontSize: `${fontSize}px`, color: textColor }}
-          >
-            {data.label}
-          </span>
+          {/* Multi-line labels support */}
+          {data.labelLines && data.labelLines.length > 0 ? (
+            data.labelLines.map((line, index) => (
+              <span
+                key={index}
+                className="leading-tight"
+                style={{ 
+                  fontSize: `${line.fontSize}px`, 
+                  color: textColor,
+                  fontWeight: line.fontWeight || 'normal',
+                }}
+              >
+                {line.text}
+              </span>
+            ))
+          ) : (
+            <span
+              className="font-medium leading-tight"
+              style={{ fontSize: `${fontSize}px`, color: textColor }}
+            >
+              {data.label}
+            </span>
+          )}
           {data.description && (
             <span 
               className="text-xs mt-0.5 max-w-[150px] truncate"

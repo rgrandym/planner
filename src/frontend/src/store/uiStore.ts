@@ -3,6 +3,16 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 /**
+ * Custom label override for sidebar items
+ */
+interface SidebarCustomLabels {
+  /** Custom category labels by category ID */
+  categoryLabels: Record<NodeCategory, string>;
+  /** Custom node labels by node type */
+  nodeLabels: Record<string, string>;
+}
+
+/**
  * UI visibility and layout preferences store
  */
 interface UIStore {
@@ -16,6 +26,9 @@ interface UIStore {
   // Sidebar category order
   categoryOrder: NodeCategory[];
   
+  // Sidebar custom labels
+  sidebarLabels: SidebarCustomLabels;
+  
   // Actions
   toggleLeftSidebar: () => void;
   toggleRightPanel: () => void;
@@ -28,6 +41,13 @@ interface UIStore {
   moveCategoryUp: (categoryId: NodeCategory) => void;
   moveCategoryDown: (categoryId: NodeCategory) => void;
   resetCategoryOrder: () => void;
+  
+  // Sidebar label actions
+  setCategoryLabel: (categoryId: NodeCategory, label: string) => void;
+  setNodeLabel: (nodeType: string, label: string) => void;
+  resetCategoryLabel: (categoryId: NodeCategory) => void;
+  resetNodeLabel: (nodeType: string) => void;
+  resetAllLabels: () => void;
 }
 
 /**
@@ -50,6 +70,14 @@ const defaultCategoryOrder: NodeCategory[] = [
 ];
 
 /**
+ * Default empty sidebar labels
+ */
+const defaultSidebarLabels: SidebarCustomLabels = {
+  categoryLabels: {} as Record<NodeCategory, string>,
+  nodeLabels: {},
+};
+
+/**
  * UI Store with persistence
  */
 export const useUIStore = create<UIStore>()(
@@ -62,6 +90,7 @@ export const useUIStore = create<UIStore>()(
       isMinimapVisible: true,
       isFullViewMode: false,
       categoryOrder: defaultCategoryOrder,
+      sidebarLabels: defaultSidebarLabels,
 
       // Toggle actions
       toggleLeftSidebar: () => set((state) => ({ 
@@ -115,6 +144,57 @@ export const useUIStore = create<UIStore>()(
       },
 
       resetCategoryOrder: () => set({ categoryOrder: defaultCategoryOrder }),
+      
+      // Sidebar label actions
+      setCategoryLabel: (categoryId, label) => {
+        const current = get().sidebarLabels;
+        set({
+          sidebarLabels: {
+            ...current,
+            categoryLabels: {
+              ...current.categoryLabels,
+              [categoryId]: label,
+            },
+          },
+        });
+      },
+      
+      setNodeLabel: (nodeType, label) => {
+        const current = get().sidebarLabels;
+        set({
+          sidebarLabels: {
+            ...current,
+            nodeLabels: {
+              ...current.nodeLabels,
+              [nodeType]: label,
+            },
+          },
+        });
+      },
+      
+      resetCategoryLabel: (categoryId) => {
+        const current = get().sidebarLabels;
+        const { [categoryId]: _, ...rest } = current.categoryLabels;
+        set({
+          sidebarLabels: {
+            ...current,
+            categoryLabels: rest as Record<NodeCategory, string>,
+          },
+        });
+      },
+      
+      resetNodeLabel: (nodeType) => {
+        const current = get().sidebarLabels;
+        const { [nodeType]: _, ...rest } = current.nodeLabels;
+        set({
+          sidebarLabels: {
+            ...current,
+            nodeLabels: rest,
+          },
+        });
+      },
+      
+      resetAllLabels: () => set({ sidebarLabels: defaultSidebarLabels }),
     }),
     {
       name: 'archflow-ui-settings',

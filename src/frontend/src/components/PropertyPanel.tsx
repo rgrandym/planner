@@ -2,8 +2,8 @@ import { NODE_TYPE_MAP } from '@/config/nodes';
 import { useFlowStore } from '@/store/flowStore';
 import { useGlobalSettingsStore } from '@/store/globalSettingsStore';
 import { useUIStore } from '@/store/uiStore';
-import { ArchNodeData, NodeCategory } from '@/types';
-import { Box, Copy, PanelRightClose, Pin, PinOff, Trash2, X } from 'lucide-react';
+import { ArchNodeData, LabelLine, NodeCategory } from '@/types';
+import { Box, Copy, Minus, PanelRightClose, Pin, PinOff, Plus, Trash2, X } from 'lucide-react';
 import { useMemo } from 'react';
 import { ColorPicker } from './ColorPicker';
 
@@ -177,6 +177,109 @@ export function PropertyPanel() {
               />
             </div>
           </div>
+        </section>
+
+        {/* Multi-line Labels Section */}
+        <section>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              Label Lines
+            </h3>
+            <button
+              onClick={() => {
+                const currentLines = data.labelLines || [];
+                const newLine: LabelLine = { 
+                  text: 'New line', 
+                  fontSize: data.fontSize ?? globalSettings.defaultFontSize,
+                  fontWeight: 'normal'
+                };
+                handleUpdate('labelLines', [...currentLines, newLine]);
+              }}
+              className="flex items-center gap-1 px-2 py-1 text-xs rounded
+                         bg-arch-primary/20 text-arch-primary hover:bg-arch-primary/30 transition-colors"
+            >
+              <Plus size={12} />
+              Add Line
+            </button>
+          </div>
+          
+          {(!data.labelLines || data.labelLines.length === 0) ? (
+            <p className="text-xs text-gray-500 italic">
+              No custom label lines. Using single-line label above.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {data.labelLines.map((line, index) => (
+                <div key={index} className="p-3 bg-arch-bg rounded-lg border border-arch-border space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs text-gray-500">Line {index + 1}</span>
+                    <button
+                      onClick={() => {
+                        const newLines = data.labelLines?.filter((_, i) => i !== index) || [];
+                        handleUpdate('labelLines', newLines.length > 0 ? newLines : undefined);
+                      }}
+                      className="p-1 rounded hover:bg-red-500/20 text-red-400"
+                      title="Remove line"
+                    >
+                      <Minus size={12} />
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    value={line.text}
+                    onChange={(e) => {
+                      const newLines = [...(data.labelLines || [])];
+                      newLines[index] = { ...newLines[index], text: e.target.value };
+                      handleUpdate('labelLines', newLines);
+                    }}
+                    placeholder="Line text..."
+                    className="w-full px-2 py-1.5 bg-arch-surface border border-arch-border rounded
+                               text-white text-sm focus:border-arch-primary outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Size: {line.fontSize}px
+                      </label>
+                      <input
+                        type="range"
+                        min={globalSettings.fontSizeRange.min}
+                        max={globalSettings.fontSizeRange.max}
+                        value={line.fontSize}
+                        onChange={(e) => {
+                          const newLines = [...(data.labelLines || [])];
+                          newLines[index] = { ...newLines[index], fontSize: parseInt(e.target.value) };
+                          handleUpdate('labelLines', newLines);
+                        }}
+                        className="w-full accent-arch-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Weight</label>
+                      <select
+                        value={line.fontWeight || 'normal'}
+                        onChange={(e) => {
+                          const newLines = [...(data.labelLines || [])];
+                          newLines[index] = { 
+                            ...newLines[index], 
+                            fontWeight: e.target.value as LabelLine['fontWeight'] 
+                          };
+                          handleUpdate('labelLines', newLines);
+                        }}
+                        className="px-2 py-1 bg-arch-surface border border-arch-border rounded
+                                   text-white text-xs focus:border-arch-primary outline-none"
+                      >
+                        <option value="normal">Normal</option>
+                        <option value="medium">Medium</option>
+                        <option value="semibold">Semibold</option>
+                        <option value="bold">Bold</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Styling Section */}

@@ -30,6 +30,18 @@ export type NodeShape =
   | 'rounded';
 
 /**
+ * A single line of label text with its own font size
+ */
+export interface LabelLine {
+  /** The text content for this line */
+  text: string;
+  /** Font size in pixels for this line */
+  fontSize: number;
+  /** Font weight for this line */
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+}
+
+/**
  * Configuration for a node type in the palette
  */
 export interface NodeTypeConfig {
@@ -87,6 +99,8 @@ export interface ArchNodeData {
   width?: number;
   /** Custom height (50-400) */
   height?: number;
+  /** Multi-line label support - array of lines with individual font sizes */
+  labelLines?: LabelLine[];
 }
 
 /**
