@@ -12,6 +12,11 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    open: {
+      app: {
+        name: 'Google Chrome',
+      },
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:8000',

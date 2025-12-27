@@ -4,10 +4,11 @@ import {
     ARROW_HEAD_STYLES,
     useGlobalSettingsStore,
 } from '@/store/globalSettingsStore';
+import { useStylePresetsStore } from '@/store/stylePresetsStore';
 import { useThemeStore } from '@/store/themeStore';
 import { useUIStore } from '@/store/uiStore';
 import { EdgeLineStyle, NodeTypeConfig } from '@/types';
-import { ArrowRight, CheckCircle2, Folder, Layout, Moon, Palette, Plus, RotateCcw, Settings2, Sun, Trash2, Type, X } from 'lucide-react';
+import { ArrowRight, CheckCircle2, Copy, Folder, Layout, Moon, Palette, Plus, RotateCcw, Save, Settings2, Sliders, Sun, Trash2, Type, X } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
 import { ColorPicker } from './ColorPicker';
@@ -18,7 +19,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'general' | 'ui' | 'fonts' | 'lines' | 'colors' | 'icons' | 'files' | 'custom-nodes';
+type SettingsTab = 'general' | 'ui' | 'presets' | 'fonts' | 'lines' | 'colors' | 'files' | 'custom-nodes';
 
 /**
  * Line style options
@@ -44,12 +45,15 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [isCreatingNode, setIsCreatingNode] = useState(false);
   const [editingNode, setEditingNode] = useState<NodeTypeConfig | null>(null);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [newPresetDescription, setNewPresetDescription] = useState('');
 
   const { mode, toggleMode } = useThemeStore();
   const { customNodes, addCustomNode, updateCustomNode, deleteCustomNode, getIconName } =
     useCustomNodesStore();
   
   const globalSettings = useGlobalSettingsStore();
+  const stylePresets = useStylePresetsStore();
   const uiStore = useUIStore();
   const { 
     nodes, 
@@ -145,6 +149,20 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           >
             <Layout size={16} />
             Interface
+          </button>
+          <button
+            onClick={() => setActiveTab('presets')}
+            className={`
+              px-4 py-3 border-b-2 transition-colors font-medium text-sm whitespace-nowrap flex items-center gap-2
+              ${
+                activeTab === 'presets'
+                  ? 'border-arch-primary text-arch-primary'
+                  : 'border-transparent text-gray-400 hover:text-gray-300 dark:text-gray-400 dark:hover:text-gray-300 light:text-arch-text-secondary-light'
+              }
+            `}
+          >
+            <Sliders size={16} />
+            Style Presets
           </button>
           <button
             onClick={() => setActiveTab('fonts')}
@@ -413,6 +431,177 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
           )}
 
+          {/* Style Presets Tab */}
+          {activeTab === 'presets' && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-3">Style Presets</h3>
+                <p className="text-sm text-gray-400 mb-4">
+                  Quickly switch between different visual styles or save your current settings as a preset
+                </p>
+              </div>
+
+              {/* Category Colors Toggle - Prominent */}
+              <div className="p-4 bg-arch-primary/10 rounded-lg border border-arch-primary/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium text-white">Use Category Colors</h4>
+                    <p className="text-xs text-gray-400 mt-1">
+                      When enabled, new nodes use their category's color (AI=purple, DB=blue, etc.)
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => globalSettings.setUseCategoryColors(!globalSettings.useCategoryColors)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      globalSettings.useCategoryColors ? 'bg-arch-primary' : 'bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                        globalSettings.useCategoryColors ? 'left-7' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+
+              {/* Built-in Presets */}
+              <div className="p-4 bg-arch-bg rounded-lg border border-arch-border space-y-4">
+                <h4 className="text-sm font-medium text-gray-300">Built-in Presets</h4>
+                <div className="grid grid-cols-2 gap-3">
+                  {stylePresets.getBuiltInPresets().map((preset) => (
+                    <button
+                      key={preset.id}
+                      onClick={() => {
+                        stylePresets.applyPreset(preset.id);
+                        toast.success(`Applied "${preset.name}" preset`);
+                      }}
+                      className={`p-3 rounded-lg border transition-all text-left ${
+                        stylePresets.activePresetId === preset.id
+                          ? 'border-arch-primary bg-arch-primary/10'
+                          : 'border-arch-border bg-arch-surface hover:border-gray-600'
+                      }`}
+                    >
+                      <p className={`text-sm font-medium ${
+                        stylePresets.activePresetId === preset.id ? 'text-arch-primary' : 'text-white'
+                      }`}>
+                        {preset.name}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">{preset.description}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Custom Presets */}
+              <div className="p-4 bg-arch-bg rounded-lg border border-arch-border space-y-4">
+                <h4 className="text-sm font-medium text-gray-300">Custom Presets</h4>
+                
+                {stylePresets.customPresets.length === 0 ? (
+                  <p className="text-xs text-gray-500">No custom presets yet. Save your current settings to create one.</p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    {stylePresets.customPresets.map((preset) => (
+                      <div
+                        key={preset.id}
+                        className={`p-3 rounded-lg border transition-all ${
+                          stylePresets.activePresetId === preset.id
+                            ? 'border-arch-primary bg-arch-primary/10'
+                            : 'border-arch-border bg-arch-surface'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <button
+                            onClick={() => {
+                              stylePresets.applyPreset(preset.id);
+                              toast.success(`Applied "${preset.name}" preset`);
+                            }}
+                            className="text-left flex-1"
+                          >
+                            <p className={`text-sm font-medium ${
+                              stylePresets.activePresetId === preset.id ? 'text-arch-primary' : 'text-white'
+                            }`}>
+                              {preset.name}
+                            </p>
+                            {preset.description && (
+                              <p className="text-xs text-gray-500 mt-1">{preset.description}</p>
+                            )}
+                          </button>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              const newId = stylePresets.duplicatePreset(preset.id, `${preset.name} (Copy)`);
+                              if (newId) toast.success('Preset duplicated');
+                            }}
+                            className="flex-1 px-2 py-1 bg-arch-surface-light hover:bg-gray-700 
+                                       text-gray-300 text-xs rounded transition-colors flex items-center justify-center gap-1"
+                          >
+                            <Copy size={12} />
+                            Duplicate
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (confirm('Delete this preset?')) {
+                                stylePresets.deletePreset(preset.id);
+                                toast.success('Preset deleted');
+                              }
+                            }}
+                            className="px-2 py-1 bg-red-500/20 hover:bg-red-500/30 
+                                       text-red-400 text-xs rounded transition-colors flex items-center gap-1"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Save Current Settings */}
+              <div className="p-4 bg-arch-bg rounded-lg border border-arch-border space-y-4">
+                <h4 className="text-sm font-medium text-gray-300">Save Current Settings as Preset</h4>
+                <div className="space-y-3">
+                  <input
+                    type="text"
+                    placeholder="Preset name"
+                    value={newPresetName}
+                    onChange={(e) => setNewPresetName(e.target.value)}
+                    className="w-full px-3 py-2 bg-arch-surface border border-arch-border rounded-lg
+                               text-white text-sm focus:border-arch-primary outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={newPresetDescription}
+                    onChange={(e) => setNewPresetDescription(e.target.value)}
+                    className="w-full px-3 py-2 bg-arch-surface border border-arch-border rounded-lg
+                               text-white text-sm focus:border-arch-primary outline-none"
+                  />
+                  <button
+                    onClick={() => {
+                      if (!newPresetName.trim()) {
+                        toast.error('Please enter a preset name');
+                        return;
+                      }
+                      stylePresets.saveCurrentAsPreset(newPresetName.trim(), newPresetDescription.trim());
+                      toast.success(`Saved "${newPresetName}" preset`);
+                      setNewPresetName('');
+                      setNewPresetDescription('');
+                    }}
+                    disabled={!newPresetName.trim()}
+                    className="flex items-center gap-2 px-4 py-2 bg-arch-primary hover:bg-arch-primary/80
+                               text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save size={16} />
+                    Save Preset
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Fonts Tab */}
           {activeTab === 'fonts' && (
             <div className="space-y-6">
@@ -634,6 +823,30 @@ export function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <p className="text-sm text-gray-400 mb-4">
                   Configure default colors for new nodes
                 </p>
+              </div>
+
+              {/* Category Colors Toggle */}
+              <div className="p-4 bg-arch-primary/10 rounded-lg border border-arch-primary/30">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-medium text-white">Use Category Colors</h4>
+                    <p className="text-xs text-gray-400 mt-1">
+                      When enabled, new nodes use their category's color instead of the default color below
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => globalSettings.setUseCategoryColors(!globalSettings.useCategoryColors)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      globalSettings.useCategoryColors ? 'bg-arch-primary' : 'bg-gray-600'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${
+                        globalSettings.useCategoryColors ? 'left-7' : 'left-1'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
 
               <div className="p-4 bg-arch-bg rounded-lg border border-arch-border space-y-5">

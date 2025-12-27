@@ -224,6 +224,14 @@ export function Canvas() {
         };
         addNode(newNode);
       } else {
+        // Determine node color based on useCategoryColors setting
+        const nodeColor = globalSettings.useCategoryColors 
+          ? (nodeType.color || CATEGORY_COLORS[nodeType.category as keyof typeof CATEGORY_COLORS] || globalSettings.defaultNodeColor)
+          : globalSettings.defaultNodeColor;
+        const borderColor = globalSettings.useCategoryColors
+          ? (nodeType.color || CATEGORY_COLORS[nodeType.category as keyof typeof CATEGORY_COLORS] || globalSettings.defaultBorderColor)
+          : globalSettings.defaultBorderColor;
+
         const newNode: Node<ArchNodeData> = {
           id: `${nodeType.type}_${Date.now()}`,
           type: 'baseNode',
@@ -232,12 +240,12 @@ export function Canvas() {
             label: nodeType.label,
             nodeType: nodeType.type,
             icon: nodeType.icon,
-            color: globalSettings.defaultNodeColor,
+            color: nodeColor,
             category: nodeType.category,
             description: '',
             opacity: globalSettings.defaultNodeOpacity,
             fontSize: globalSettings.defaultFontSize,
-            borderColor: globalSettings.defaultBorderColor,
+            borderColor: borderColor,
             borderWidth: globalSettings.defaultBorderWidth,
             iconSize: globalSettings.defaultIconSize,
           },

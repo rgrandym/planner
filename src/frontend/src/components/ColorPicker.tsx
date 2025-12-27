@@ -320,7 +320,7 @@ export function ColorPicker({
                 <div className="pt-3 border-t border-arch-border">
                   <p className="text-xs text-gray-500 mb-2">Saved Colors</p>
                   <div className="flex flex-wrap gap-2">
-                    {customColors.map((color) => (
+                    {customColors.map((color: string) => (
                       <button
                         key={color}
                         onClick={() => handleColorSelect(color)}

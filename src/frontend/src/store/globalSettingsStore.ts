@@ -52,6 +52,9 @@ interface GlobalSettings {
   // Save Directory
   saveDirectory: string | null;
   exportDirectory: string | null;
+  
+  // Category Colors
+  useCategoryColors: boolean;
 }
 
 /**
@@ -91,14 +94,17 @@ interface GlobalSettingsStore extends GlobalSettings {
   setSaveDirectory: (path: string | null) => void;
   setExportDirectory: (path: string | null) => void;
   
+  // Category Colors Action
+  setUseCategoryColors: (use: boolean) => void;
+  
   // Utility
   resetToDefaults: () => void;
 }
 
 /**
- * Default settings
+ * Default settings - exported for reset functionality
  */
-const defaultSettings: GlobalSettings = {
+export const DEFAULT_SETTINGS: GlobalSettings = {
   // Font Settings
   defaultFontSize: 14,
   fontSizeRange: { min: 8, max: 32 },
@@ -130,7 +136,13 @@ const defaultSettings: GlobalSettings = {
   // Save Directory
   saveDirectory: null,
   exportDirectory: null,
+  
+  // Category Colors - default to true (original behavior)
+  useCategoryColors: true,
 };
+
+// Alias for backwards compatibility
+const defaultSettings = DEFAULT_SETTINGS;
 
 /**
  * Global settings store with localStorage persistence
@@ -179,8 +191,11 @@ export const useGlobalSettingsStore = create<GlobalSettingsStore>()(
       setSaveDirectory: (path) => set({ saveDirectory: path }),
       setExportDirectory: (path) => set({ exportDirectory: path }),
 
+      // Category Colors Action
+      setUseCategoryColors: (use) => set({ useCategoryColors: use }),
+
       // Reset
-      resetToDefaults: () => set(defaultSettings),
+      resetToDefaults: () => set(DEFAULT_SETTINGS),
     }),
     {
       name: 'archflow-global-settings',
