@@ -1,38 +1,13 @@
 import { useFlowStore } from '@/store/flowStore';
 import { ArrowHeadStyle, useGlobalSettingsStore } from '@/store/globalSettingsStore';
 import { EdgeLineStyle } from '@/types';
+import {
+    calculateHandleOffset,
+    generateSmoothPath,
+    getPositionFromHandleId,
+} from '@/utils/edgeRouting';
 import { memo, useMemo } from 'react';
-import { BaseEdge, EdgeProps, getBezierPath } from 'reactflow';
-
-/**
- * Calculate offset for parallel edges between same nodes
- * This ensures multiple connectors don't overlap
- */
-function getParallelEdgeOffset(
-  edgeId: string,
-  source: string,
-  target: string,
-  allEdges: { id: string; source: string; target: string }[]
-): number {
-  // Find all edges between the same source and target (in either direction)
-  const parallelEdges = allEdges.filter(
-    (e) =>
-      (e.source === source && e.target === target) ||
-      (e.source === target && e.target === source)
-  );
-
-  if (parallelEdges.length <= 1) return 0;
-
-  // Find this edge's index among parallel edges
-  const edgeIndex = parallelEdges.findIndex((e) => e.id === edgeId);
-  const totalEdges = parallelEdges.length;
-
-  // Calculate offset: spread edges evenly, centered around 0
-  const spacing = 25; // pixels between parallel edges
-  const offset = (edgeIndex - (totalEdges - 1) / 2) * spacing;
-
-  return offset;
-}
+import { EdgeProps, Position, useReactFlow } from 'reactflow';
 
 /**
  * Get stroke dasharray based on line style
@@ -69,14 +44,40 @@ function getArrowHeadPath(style: ArrowHeadStyle): string {
 }
 
 /**
+ * Calculate parallel edge index and total count for edges from same source side
+ */
+function getParallelEdgeInfo(
+  edgeId: string,
+  source: string,
+  sourceHandleId: string | null | undefined,
+  allEdges: {
+    id: string;
+    source: string;
+    sourceHandle?: string | null;
+  }[]
+): { index: number; total: number } {
+  const sourcePos = getPositionFromHandleId(sourceHandleId || 'right-source');
+
+  // Find edges with same source node and same source side
+  const parallelEdges = allEdges.filter((e) => {
+    if (e.source !== source) return false;
+    const eSourcePos = getPositionFromHandleId(e.sourceHandle || 'right-source');
+    return eSourcePos === sourcePos;
+  });
+
+  const index = parallelEdges.findIndex((e) => e.id === edgeId);
+  return { index: Math.max(0, index), total: parallelEdges.length };
+}
+
+/**
  * CustomEdge Component
  * A custom edge with:
  * - Smooth bezier curves for organic flow
+ * - Smart routing for multiple connections from same side
  * - Configurable arrowhead markers (filled, outlined, diamond, circle, none)
- * - Support for multiple parallel edges between same nodes
  * - Line style customization (solid, dashed, dotted)
- * - Individual edge styling (color, width)
- * - Arrow size proportional to line thickness
+ * - Connection point indicators (small circles at attachment points)
+ * - Edge labels for annotations (like "true/false" branches)
  */
 function CustomEdgeComponent({
   id,
@@ -88,68 +89,144 @@ function CustomEdgeComponent({
   targetY,
   sourcePosition,
   targetPosition,
+  sourceHandleId,
+  targetHandleId,
   style = {},
   data,
   selected,
 }: EdgeProps) {
   const edges = useFlowStore((state) => state.edges);
+  const { getNode } = useReactFlow();
   const globalSettings = useGlobalSettingsStore();
 
-  // Calculate offset for parallel edges
-  const offset = useMemo(
-    () => getParallelEdgeOffset(id, source, target, edges),
-    [id, source, target, edges]
-  );
+  // Get source and target nodes for dimension calculations
+  const sourceNode = getNode(source);
+  const targetNode = getNode(target);
 
   // Get edge properties with fallbacks to global settings
   const strokeColor = (style.stroke as string) || globalSettings.defaultLineColor;
   const strokeWidth = (style.strokeWidth as number) || globalSettings.defaultLineWidth;
   const lineStyle: EdgeLineStyle = data?.lineStyle || globalSettings.defaultLineStyle;
-  const arrowHeadSize = (data?.arrowHeadSize as number) || globalSettings.defaultArrowHeadSize;
-  const arrowHeadStyle: ArrowHeadStyle = (data?.arrowHeadStyle as ArrowHeadStyle) || globalSettings.defaultArrowHeadStyle;
+  const arrowHeadSize =
+    (data?.arrowHeadSize as number) || globalSettings.defaultArrowHeadSize;
+  const arrowHeadStyle: ArrowHeadStyle =
+    (data?.arrowHeadStyle as ArrowHeadStyle) || globalSettings.defaultArrowHeadStyle;
+  const edgeLabel = data?.label as string | undefined;
 
-  // Apply offset perpendicular to the edge direction
-  const dx = targetX - sourceX;
-  const dy = targetY - sourceY;
-  const length = Math.sqrt(dx * dx + dy * dy);
-
-  // Normalize and get perpendicular direction
-  const perpX = length > 0 ? -dy / length : 0;
-  const perpY = length > 0 ? dx / length : 0;
-
-  // Adjust source and target positions for offset
-  const adjustedSourceX = sourceX + perpX * offset;
-  const adjustedSourceY = sourceY + perpY * offset;
-  const adjustedTargetX = targetX + perpX * offset;
-  const adjustedTargetY = targetY + perpY * offset;
-
-  // Calculate dynamic curvature based on distance and offset
-  const distance = Math.sqrt(
-    Math.pow(adjustedTargetX - adjustedSourceX, 2) +
-    Math.pow(adjustedTargetY - adjustedSourceY, 2)
+  // Calculate handle offsets for multiple connections per side
+  const sourceOffset = useMemo(
+    () =>
+      calculateHandleOffset(
+        id,
+        source,
+        sourcePosition || Position.Right,
+        true,
+        edges
+      ),
+    [id, source, sourcePosition, edges]
   );
-  const curvature = Math.min(0.5, Math.max(0.15, 150 / distance + Math.abs(offset) / 100));
 
-  // Generate smooth bezier path
-  const [edgePath] = getBezierPath({
-    sourceX: adjustedSourceX,
-    sourceY: adjustedSourceY,
-    sourcePosition,
-    targetX: adjustedTargetX,
-    targetY: adjustedTargetY,
-    targetPosition,
-    curvature,
-  });
+  const targetOffset = useMemo(
+    () =>
+      calculateHandleOffset(
+        id,
+        target,
+        targetPosition || Position.Left,
+        false,
+        edges
+      ),
+    [id, target, targetPosition, edges]
+  );
+
+  // Get parallel edge info for curve separation
+  const { index: parallelIndex, total: parallelTotal } = useMemo(
+    () => getParallelEdgeInfo(id, source, sourceHandleId, edges),
+    [id, source, sourceHandleId, edges]
+  );
+
+  // Calculate adjusted positions based on node dimensions and offsets
+  const getAdjustedPosition = (
+    baseX: number,
+    baseY: number,
+    position: Position,
+    offset: number,
+    node: typeof sourceNode
+  ) => {
+    if (!node) return { x: baseX, y: baseY };
+
+    const nodeWidth = node.width || 150;
+    const nodeHeight = node.height || 50;
+    const isHorizontal = position === Position.Top || position === Position.Bottom;
+    const offsetPx = offset * (isHorizontal ? nodeWidth : nodeHeight) * 0.6;
+
+    switch (position) {
+      case Position.Top:
+      case Position.Bottom:
+        return { x: baseX + offsetPx, y: baseY };
+      case Position.Left:
+      case Position.Right:
+        return { x: baseX, y: baseY + offsetPx };
+      default:
+        return { x: baseX, y: baseY };
+    }
+  };
+
+  const adjustedSource = getAdjustedPosition(
+    sourceX,
+    sourceY,
+    sourcePosition || Position.Right,
+    sourceOffset,
+    sourceNode
+  );
+  const adjustedTarget = getAdjustedPosition(
+    targetX,
+    targetY,
+    targetPosition || Position.Left,
+    targetOffset,
+    targetNode
+  );
+
+  // Generate smooth bezier path with smart routing
+  const edgePath = useMemo(
+    () =>
+      generateSmoothPath(
+        adjustedSource.x,
+        adjustedSource.y,
+        adjustedTarget.x,
+        adjustedTarget.y,
+        sourcePosition || Position.Right,
+        targetPosition || Position.Left,
+        parallelIndex,
+        parallelTotal
+      ),
+    [
+      adjustedSource.x,
+      adjustedSource.y,
+      adjustedTarget.x,
+      adjustedTarget.y,
+      sourcePosition,
+      targetPosition,
+      parallelIndex,
+      parallelTotal,
+    ]
+  );
 
   // Generate unique marker ID for this edge's combination of color, style, and size
   const markerId = `arrowhead-${id}-${strokeColor.replace('#', '')}-${arrowHeadStyle}-${arrowHeadSize}`;
-  
+
   // Calculate arrow size proportional to stroke width
   const baseArrowSize = 12;
   const scaledArrowSize = baseArrowSize * arrowHeadSize * (1 + (strokeWidth - 2) * 0.15);
 
+  // Calculate label position (middle of the curve)
+  const labelX = (adjustedSource.x + adjustedTarget.x) / 2;
+  const labelY = (adjustedSource.y + adjustedTarget.y) / 2 - 10;
+
+  // Connection point indicator size
+  const connectionPointSize = 4;
+
   return (
-    <>
+    <g className="react-flow__edge">
       {/* SVG Defs for arrowhead marker */}
       {arrowHeadStyle !== 'none' && (
         <defs>
@@ -174,20 +251,32 @@ function CustomEdgeComponent({
         </defs>
       )}
 
-      {/* Edge Path */}
-      <BaseEdge
+      {/* Selection highlight (behind main edge) */}
+      {selected && (
+        <path
+          d={edgePath}
+          fill="none"
+          stroke={strokeColor}
+          strokeWidth={strokeWidth + 6}
+          strokeOpacity={0.15}
+          strokeLinecap="round"
+          className="react-flow__edge-interaction"
+        />
+      )}
+
+      {/* Main Edge Path */}
+      <path
         id={id}
-        path={edgePath}
-        style={{
-          ...style,
-          stroke: strokeColor,
-          strokeWidth: selected ? strokeWidth + 1 : strokeWidth,
-          strokeDasharray: getStrokeDasharray(lineStyle),
-          strokeLinecap: 'round',
-          strokeLinejoin: 'round',
-          cursor: 'pointer',
-        }}
+        d={edgePath}
+        fill="none"
+        stroke={strokeColor}
+        strokeWidth={selected ? strokeWidth + 0.5 : strokeWidth}
+        strokeDasharray={getStrokeDasharray(lineStyle)}
+        strokeLinecap="round"
+        strokeLinejoin="round"
         markerEnd={arrowHeadStyle !== 'none' ? `url(#${markerId})` : undefined}
+        className="react-flow__edge-path"
+        style={{ cursor: 'pointer' }}
       />
 
       {/* Invisible wider path for easier selection */}
@@ -197,21 +286,58 @@ function CustomEdgeComponent({
         stroke="transparent"
         strokeWidth={20}
         style={{ cursor: 'pointer' }}
+        className="react-flow__edge-interaction"
       />
 
-      {/* Selection highlight */}
-      {selected && (
-        <path
-          d={edgePath}
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth={strokeWidth + 4}
-          strokeOpacity={0.2}
-          strokeDasharray={getStrokeDasharray(lineStyle)}
-          strokeLinecap="round"
-        />
+      {/* Connection point indicator at source */}
+      <circle
+        cx={adjustedSource.x}
+        cy={adjustedSource.y}
+        r={connectionPointSize}
+        fill={strokeColor}
+        stroke="#1e1e1e"
+        strokeWidth={1.5}
+        className="react-flow__edge-connection-point"
+      />
+
+      {/* Connection point indicator at target */}
+      <circle
+        cx={adjustedTarget.x}
+        cy={adjustedTarget.y}
+        r={connectionPointSize}
+        fill={strokeColor}
+        stroke="#1e1e1e"
+        strokeWidth={1.5}
+        className="react-flow__edge-connection-point"
+      />
+
+      {/* Edge Label */}
+      {edgeLabel && (
+        <g transform={`translate(${labelX}, ${labelY})`}>
+          <rect
+            x={-edgeLabel.length * 3.5 - 6}
+            y={-10}
+            width={edgeLabel.length * 7 + 12}
+            height={20}
+            rx={4}
+            fill="#1e1e1e"
+            stroke={strokeColor}
+            strokeWidth={1}
+            opacity={0.9}
+          />
+          <text
+            x={0}
+            y={4}
+            textAnchor="middle"
+            fill="#ffffff"
+            fontSize={11}
+            fontFamily="system-ui, sans-serif"
+          >
+            {edgeLabel}
+          </text>
+        </g>
       )}
-    </>
+    </g>
   );
 }
 

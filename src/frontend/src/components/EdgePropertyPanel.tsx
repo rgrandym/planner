@@ -47,6 +47,7 @@ export function EdgePropertyPanel() {
   const arrowHeadSize = (selectedEdge.data?.arrowHeadSize as number) || globalSettings.defaultArrowHeadSize;
   const arrowHeadStyle: ArrowHeadStyle = (selectedEdge.data?.arrowHeadStyle as ArrowHeadStyle) || globalSettings.defaultArrowHeadStyle;
   const isAnimated = selectedEdge.animated || false;
+  const edgeLabel = (selectedEdge.data?.label as string) || '';
 
   /**
    * Update edge style
@@ -136,6 +137,28 @@ export function EdgePropertyPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {/* Label Section */}
+        <section>
+          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+            Label
+          </h3>
+          <div>
+            <label className="block text-sm text-gray-300 mb-1">Edge Label</label>
+            <input
+              type="text"
+              value={edgeLabel}
+              onChange={(e) => handleDataUpdate('label', e.target.value)}
+              placeholder="e.g., true, false, next..."
+              className="w-full px-3 py-2 bg-arch-bg border border-arch-border rounded-lg
+                         text-white text-sm focus:border-arch-primary focus:ring-1 
+                         focus:ring-arch-primary outline-none transition-colors"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Label appears at the middle of the connector
+            </p>
+          </div>
+        </section>
+
         {/* Styling Section */}
         <section>
           <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
