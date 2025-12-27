@@ -8,6 +8,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Any, Optional
 import json
+import subprocess
+import platform
 from pathlib import Path
 
 app = FastAPI(
@@ -233,6 +235,77 @@ display(Markdown(f"```mermaid\\n{{mermaid_code}}\\n```"))'''
             "mermaid": mermaid_code,
             "python": python_code,
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class OpenUrlRequest(BaseModel):
+    """Request model for opening URL in browser."""
+    url: str
+
+
+@app.post("/open-url")
+async def open_url_in_chrome(request: OpenUrlRequest):
+    """
+    Open a URL in Chrome browser.
+    
+    This endpoint is used because Safari doesn't support the File System Access API
+    for saving files to directories.
+    
+    Args:
+        request: OpenUrlRequest containing the URL to open
+        
+    Returns:
+        Status message
+    """
+    try:
+        url = request.url
+        system = platform.system()
+        
+        if system == "Darwin":  # macOS
+            # Try Chrome first, fall back to default browser
+            try:
+                subprocess.run(
+                    ["open", "-a", "Google Chrome", url],
+                    check=True,
+                    capture_output=True
+                )
+            except subprocess.CalledProcessError:
+                # Chrome not found, try Chromium or fall back to default
+                try:
+                    subprocess.run(
+                        ["open", "-a", "Chromium", url],
+                        check=True,
+                        capture_output=True
+                    )
+                except subprocess.CalledProcessError:
+                    # Fall back to default browser
+                    subprocess.run(["open", url], check=True)
+        elif system == "Windows":
+            # Try Chrome on Windows
+            try:
+                subprocess.run(
+                    ["start", "chrome", url],
+                    shell=True,
+                    check=True,
+                    capture_output=True
+                )
+            except subprocess.CalledProcessError:
+                # Fall back to default browser
+                subprocess.run(["start", url], shell=True, check=True)
+        elif system == "Linux":
+            # Try Chrome/Chromium on Linux
+            for browser in ["google-chrome", "chromium-browser", "chromium"]:
+                try:
+                    subprocess.run([browser, url], check=True, capture_output=True)
+                    break
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    continue
+            else:
+                # Fall back to xdg-open
+                subprocess.run(["xdg-open", url], check=True)
+        
+        return {"status": "success", "message": f"Opened {url} in Chrome"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
